@@ -5,6 +5,41 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0-alpha.1] - not yet tagged
+
+### Added
+- Processing infrastructure (milestone M5):
+  - `Zatca::b2c()->issue()`, `Zatca::b2b()->issue()` and `submit()`, returning `IssueResult`. Queue mode
+    answers `{"status": true, "message": "invoice queued", "qr": ..., "counter": ...}` without calling ZATCA.
+  - Idempotent intake per `external_invoice_id`: replays return the original result, and a different
+    payload is refused. The original payload is stored unmodified. Invalid payloads never use a counter.
+  - `ChainService`: ICV/PIH allocation under a row lock, with compare-and-set and ledger unique keys.
+    Artifact, issuance, ledger entry, counter, submission and outbox commit together; a failure consumes no ICV.
+  - Content-addressed, write-once artifact store (optional encryption, SHA-256 checked on every read).
+  - Transactional outbox with after-commit dispatch, a relay (`zatca:outbox:relay [--daemon]`), leases,
+    backpressure, dead letters and pruning (`zatca:outbox:prune`).
+  - Submission runner: claim with a fencing token, then HTTP outside any transaction, then the outcome.
+    Reporting and clearance endpoints, cleared XML stored, retries with jittered backoff (B2C compressed to
+    the 24 h deadline), per-environment circuit breaker and rate limit. 401/403 stop for manual review.
+  - Error engine with fingerprint grouping and redaction; a processing log per status transition;
+    lifecycle events `InvoiceIssued`, `InvoiceAccepted`, `InvoiceRejected`, `InvoiceSubmissionFailed`.
+  - `ChainVerifier` and `zatca:chain:verify [--deep]` (scheduled daily).
+  - Optional HTTP API with load shedding (429/503 + `Retry-After`).
+- Tests: an end-to-end processing suite and a multi-process concurrency test (6 processes on one device,
+  contiguous ICVs, deep chain verification), passing on MariaDB 10.6. 118 tests passing on Laravel 9-13.
+- Verified live on the developer portal (2026-11-02): B2C reported through the queue, B2B cleared.
+
+### Fixed
+- MySQL/MariaDB tables are always created with InnoDB. On a server that defaulted to MyISAM, transactions
+  and row locks were ignored.
+- `LaravelEventDispatcher` resolves the dispatcher at dispatch time, so it works with `Event::fake()`.
+
+### Notes
+- Developer portal: its production certificate does not belong to the device key. In the `sandbox`
+  environment only, documents are signed with the compliance certificate (warning
+  `SANDBOX_SIGNING_CERTIFICATE`). See ARCHITECTURE §2.3.
+- ⚠ Not yet run on PostgreSQL or SQL Server locally.
+
 ## [0.3.0-alpha.1] - not yet tagged
 
 ### Added

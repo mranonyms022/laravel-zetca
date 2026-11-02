@@ -13,14 +13,18 @@ use Illuminate\Contracts\Events\Dispatcher;
  */
 final class LaravelEventDispatcher implements EventDispatcher
 {
+    /** @param Dispatcher|\Closure(): Dispatcher $events a closure resolves the current dispatcher (Event::fake()) */
     public function __construct(
-        private readonly Dispatcher $events,
+        private readonly Dispatcher|\Closure $events,
         private readonly TransactionManager $transactions,
     ) {
     }
 
     public function dispatchAfterCommit(object $event): void
     {
-        $this->transactions->afterCommit(fn () => $this->events->dispatch($event));
+        $this->transactions->afterCommit(function () use ($event): void {
+            $events = $this->events instanceof \Closure ? ($this->events)() : $this->events;
+            $events->dispatch($event);
+        });
     }
 }

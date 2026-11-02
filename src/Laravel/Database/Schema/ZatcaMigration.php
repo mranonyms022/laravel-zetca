@@ -30,7 +30,12 @@ abstract class ZatcaMigration extends Migration
 
     protected function create(string $table, \Closure $callback): void
     {
-        $this->schema()->create(Tables::name($table), $callback);
+        $this->schema()->create(Tables::name($table), static function (Blueprint $blueprint) use ($callback): void {
+            // MySQL/MariaDB: InnoDB is mandatory (transactions, row locks, foreign keys). Some servers still
+            // default to MyISAM, which would silently break ICV serialization.
+            $blueprint->engine = 'InnoDB';
+            $callback($blueprint);
+        });
     }
 
     protected function drop(string ...$tables): void

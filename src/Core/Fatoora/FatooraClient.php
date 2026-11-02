@@ -23,7 +23,8 @@ use Psr\Http\Message\StreamFactoryInterface;
  *
  * The OTP is passed through to ZATCA and never stored or logged.
  *  POST  /compliance/invoices  Basic(compliance CSID), {invoiceHash, uuid, invoice} -> validation result
- * Clearance and reporting endpoints are added in M6.
+ *  POST  /invoices/reporting/single   Basic(production CSID), Clearance-Status: 0 -> reporting result
+ *  POST  /invoices/clearance/single   Basic(production CSID), Clearance-Status: 1 -> clearance result + cleared XML
  */
 final class FatooraClient
 {
@@ -76,19 +77,54 @@ final class FatooraClient
         return $this->invoiceResult($this->auth->authenticate($request, $compliance));
     }
 
+    /**
+     * POST /invoices/reporting/single (B2C, production CSID). Header Clearance-Status: 0.
+     */
+    public function reportInvoice(string $signedXml, string $invoiceHash, string $uuid, CsidCredentials $production): InvoiceSubmissionResult
+    {
+        $request = $this->json('POST', '/invoices/reporting/single', [
+            'invoiceHash' => $invoiceHash,
+            'uuid' => $uuid,
+            'invoice' => base64_encode($signedXml),
+        ])->withHeader('Clearance-Status', '0');
+
+        return $this->invoiceResult($this->auth->authenticate($request, $production));
+    }
+
+    /**
+     * POST /invoices/clearance/single (B2B, production CSID). Header Clearance-Status: 1.
+     * On success the body carries the cleared (ZATCA-stamped) invoice in `clearedInvoice`.
+     */
+    public function clearInvoice(string $signedXml, string $invoiceHash, string $uuid, CsidCredentials $production): InvoiceSubmissionResult
+    {
+        $request = $this->json('POST', '/invoices/clearance/single', [
+            'invoiceHash' => $invoiceHash,
+            'uuid' => $uuid,
+            'invoice' => base64_encode($signedXml),
+        ])->withHeader('Clearance-Status', '1');
+
+        return $this->invoiceResult($this->auth->authenticate($request, $production));
+    }
+
+    /**
+     * 200/202/400 (and 303 for clearance switched off ⚠) with validation results are returned as results.
+     * 5xx/429 and transport errors throw retryable exceptions; anything else throws non-retryable.
+     */
     private function invoiceResult(RequestInterface $request): InvoiceSubmissionResult
     {
         $response = $this->send($request);
         $status = $response->getStatusCode();
         $body = self::decode($response);
 
-        if (in_array($status, [200, 202, 400], true) && isset($body['validationResults'])) {
+        if (in_array($status, [200, 202, 303, 400], true) && isset($body['validationResults'])) {
             return InvoiceSubmissionResult::fromResponse($status, $body);
         }
+        if (in_array($status, [200, 202], true)) {
+            // Success status without a parsable body: the outcome is unknown, never assume acceptance.
+            throw FatooraApiException::unexpected($status, 'response without validationResults');
+        }
 
-        throw $status >= 500 || $status === 429
-            ? FatooraApiException::transport("HTTP {$status}: " . (self::errors($body)[0]['message'] ?? 'server error'))
-            : FatooraApiException::rejected($status, self::errors($body));
+        throw FatooraApiException::rejected($status, self::errors($body));
     }
 
     private function csid(RequestInterface $request): CsidResponse

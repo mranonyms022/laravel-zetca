@@ -36,7 +36,7 @@ abstract class IntegrationTestCase extends TestCase
         $app['config']->set('database.connections.testing', self::connectionConfig());
     }
 
-    private static function driver(): string
+    public static function driver(): string
     {
         $driver = getenv('ZATCA_TEST_DB') ?: 'sqlite';
 
@@ -44,7 +44,7 @@ abstract class IntegrationTestCase extends TestCase
     }
 
     /** @return array<string, mixed> */
-    private static function connectionConfig(): array
+    public static function connectionConfig(): array
     {
         $driver = self::driver();
 

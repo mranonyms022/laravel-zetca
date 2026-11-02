@@ -72,6 +72,18 @@ return [
         'connect_timeout' => 10,
         'max_rps' => env('ZATCA_MAX_RPS', 10),
         'max_in_flight_per_device' => env('ZATCA_MAX_IN_FLIGHT_PER_DEVICE', 2),
+        // Per-environment circuit breaker: open after N consecutive transport failures, for open_seconds.
+        'circuit' => ['failures' => 5, 'open_seconds' => 60],
+    ],
+
+    'outbox' => [
+        // Register `zatca:outbox:relay` (every minute), `zatca:outbox:prune` and `zatca:chain:verify` (daily).
+        // For low latency also run `php artisan zatca:outbox:relay --daemon` under a process supervisor.
+        'schedule' => true,
+        'max_attempts' => 10,          // handler errors before a message is dead-lettered
+        'lease_seconds' => 600,        // a dispatched message is re-dispatched if its job has not finished by then
+        // With the "sync" queue driver, jobs would run inside the request. By default they are left to the relay.
+        'dispatch_on_sync_driver' => false,
     ],
 
     'queues' => [
@@ -125,6 +137,9 @@ return [
         'max_in_flight_issuance' => env('ZATCA_MAX_IN_FLIGHT_ISSUANCE', 200),
         'max_in_flight_per_device' => 8,
         'counter_lock_wait_ms' => 2000,
+        // Extra cache lock around issuance (Redis recommended). Correctness never depends on it: the counter row
+        // lock + compare-and-set + ledger unique keys do. Off by default (the DB row lock queues waiters efficiently).
+        'advisory_chain_lock' => false,
         'shed_when_outbox_lag_seconds' => 300,
     ],
 

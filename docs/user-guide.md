@@ -41,7 +41,9 @@ After [installation](installation.md):
 4. **Multi-tenancy** scoping (see [Configuration › Multi-tenancy](configuration.md#multi-tenancy)).
 5. **Validation helpers** for ZATCA identifiers (below).
 6. **Invoice engine** (low level): validate an invoice payload and produce signed XML + QR for B2B or B2C
-   (see [Invoice engine](#invoice-engine)). Counter allocation, storage and submission come in M5–M6.
+   (see [Invoice engine](#invoice-engine)).
+7. **Issuing and submitting invoices**: `Zatca::b2c()->issue()`, `Zatca::b2b()->submit()`, queues,
+   retries and the optional HTTP API (see [Issuing invoices](#issuing-invoices)).
 
 You can browse the data with the provided Eloquent models, for example:
 
@@ -58,7 +60,7 @@ $rejectedB2b = Invoice::query()
 ```
 
 > Do not write invoices, issuances or chain entries directly. Those rows are created by the issuing
-> engine (milestones M5–M6) inside locked transactions; hand-written rows bypass the ICV/PIH guarantees.
+> engine inside locked transactions; hand-written rows bypass the ICV/PIH guarantees.
 
 ## Devices: register, onboard, renew
 
@@ -240,6 +242,87 @@ QR code, or throws `InvoiceValidationException` (with `->result`) before anythin
 - Local validation covers the rules that can be checked before signing. ZATCA applies the full rule set;
   its errors and warnings are returned as received.
 
+## Issuing invoices
+
+### B2C (simplified, reported)
+
+```php
+use CodingTriplets\Zatca\Laravel\ZatcaManager;
+
+$result = app(ZatcaManager::class)->b2c()->issue([
+    'invoice_number' => 'POS-000123',          // also the idempotency key (or pass options.external_id)
+    'lines' => [
+        ['name' => 'Coffee', 'quantity' => '2', 'unit_price' => '12.50', 'vat_category' => 'S', 'vat_rate' => '15'],
+    ],
+], ['device' => $deviceId]);
+
+return response()->json($result->toArray(), $result->httpStatus);
+```
+
+With `zatca.b2c.reporting_mode = queue` (the default), the request makes no ZATCA call. It validates the
+payload, takes the device's next ICV/PIH, signs, stores the XML and returns:
+
+```json
+{"status": true, "message": "invoice queued", "qr": "AR1NYXhp...", "counter": 10452,
+ "uuid": "540ce75e-...", "invoice_id": "01M6E1Y8WX...", "invoice_hash": "I5/YMa...",
+ "processing_status": "QUEUED", "reporting_deadline": "2026-11-03T14:57:29Z"}
+```
+
+Print `qr` on the receipt. Reporting runs on the `zatca-b2c-reporting` queue. When ZATCA answers, the invoice
+moves to `REPORTED` (or `REPORTED_WITH_WARNINGS`), or to `REJECTED` with ZATCA's errors stored. Transient
+failures (timeouts, 429, 5xx) are retried with the **same signed document**, within the 24-hour deadline.
+
+- The seller block always comes from the device's registered taxpayer data. A `seller` sent by the client
+  is replaced, and `uuid`, `icv`, `pih` and `invoice_hash` are ignored.
+- Sending the same `invoice_number` again returns the original result (HTTP 200, same counter). A different
+  payload under the same number is refused (`DuplicateInvoice`, HTTP 409). Nothing is overwritten.
+- An invalid payload returns `status: false`, `message: "validation failed"` and field errors. No counter is used.
+
+### B2B (standard, cleared)
+
+```php
+$result = app(ZatcaManager::class)->b2b()->submit($payload, ['device' => $deviceId]);   // returns at once
+```
+
+Generation and clearance run on the queues. Share a B2B invoice with the buyer **only once it is CLEARED**.
+The cleared XML (stamped by ZATCA) is stored as artifact `cleared_xml`. `b2b()->issue()` also exists: it
+issues in the request and queues clearance.
+
+### Workers
+
+```bash
+php artisan queue:work --queue=zatca-b2c-reporting,zatca-b2c-retry,zatca-b2b-generation,zatca-b2b-clearance,zatca-b2b-retry
+php artisan zatca:outbox:relay --daemon      # low-latency relay (the scheduler also runs it every minute)
+```
+
+Every submission is written to an outbox row in the same transaction as the invoice, then pushed to the
+queue after commit. If the push fails (Redis down, process killed), the relay pushes it later, so a committed
+invoice is always submitted. `zatca:chain:verify [--deep]` checks every device chain: ICVs are contiguous,
+each PIH equals the previous hash, and the stored XML re-hashes to the ledger value.
+
+### HTTP API (optional)
+
+Set `ZATCA_API_ENABLED=true` and put your auth middleware in `zatca.api.middleware`.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/zatca/b2c/invoices` | Body = payload. Headers: `X-Zatca-Device` (device ID or UUID), optional `Idempotency-Key`. 201 new, 200 replay, 409 different payload, 422 invalid |
+| POST | `/api/zatca/b2b/invoices` | Same, for B2B |
+| GET | `/api/zatca/invoices/{invoice_id}` | Current state |
+
+Under overload, the API answers `429` (too many concurrent requests) or `503` (queue backlog above
+`queues.high_water_mark`) with `Retry-After`. Requests are not left to pile up until a gateway answers 502.
+
+### Throughput and latency
+
+- One device's chain is strictly sequential, because each document embeds the previous hash. Signing takes
+  about 4 ms. Total request time depends mostly on database commit latency: about 89 ms warm on SQLite under
+  Windows, and expected to be much lower on MySQL/PostgreSQL on Linux (⚠ to be benchmarked in M8).
+- Throughput scales with the number of devices (POS terminals, or several EGS units per branch), database
+  write capacity and queue workers. Very high rates (100k+ invoices per second) need many devices, a sharded
+  database and a horizontally scaled web tier. The package takes the ZATCA round trip out of the request; it
+  cannot remove those other limits.
+
 ## Data model reference
 
 | Model | Table | Purpose |
@@ -313,10 +396,10 @@ try {
 | M2 Foundation | Schema, models, configuration, core types, compatibility CI | **Done** |
 | M3 Devices | Encrypted key vault, CSR generation, onboarding (compliance CSID → compliance checks → production CSID), renewal, expiry alerts, audit trail | **Done** |
 | M4 Invoice engine | B2B and B2C XML generation, hashing, signing, QR, compliance checks, validated against ZATCA's SDK | **Done (0.3.0-dev)** |
-| M5 Processing | Atomic ICV/PIH issuing, immutable XML storage, outbox, queues, retries, error engine, audit | Next |
-| M6 ZATCA workflows | B2B clearance, B2C reporting, retry / correct-and-reprocess / credit-debit note operations | Planned |
+| M5 Processing | Atomic ICV/PIH issuing, immutable XML storage, outbox, queues, retries, circuit breaker, error engine, B2C reporting and B2B clearance, HTTP API | **Done (0.4.0-dev)** |
+| M6 ZATCA workflows | Correct-and-reprocess, credit/debit note operations, 303 handling, reconciliation, deadline monitoring | Next |
 | M7 Dashboard | `/admin/zatca` console: dashboards, B2B/B2C lists, JSON correction editor, devices, errors, logs, reports, permissions | Planned |
 | M8 Release | Performance testing, security review, full documentation, 1.0.0 | Planned |
 
-**You cannot issue or submit invoices to ZATCA with this version.** The first version able to do so
-end-to-end in the ZATCA sandbox is expected at the end of M6.
+Issuing, reporting and clearance work end to end in the ZATCA developer sandbox. Corrections of rejected
+invoices, credit/debit note operations and the dashboard follow in M6–M7. Do not use in production before 1.0.

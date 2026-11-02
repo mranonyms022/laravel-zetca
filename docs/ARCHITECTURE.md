@@ -132,6 +132,10 @@ Run through the package (`tests/Live/SandboxOnboardingTest.php`, demo Laravel 13
 - All directory strings are UTF8String (Arabic works); countryName is PrintableString. The template name is a UTF8String.
 - The Security Standard's Table 1 lists "Invoice Type → businessCategory", but working integrations and the SDK samples put the invoice type in **title (2.5.4.12)** and the industry in businessCategory. The package follows the working form.
 
+**Reporting and clearance (2026-11-02, M5 pipeline, `Zatca::b2c()->issue()` → queue → `/invoices/reporting/single`; `Zatca::b2b()->submit()` → `/invoices/clearance/single`):** 202/200 `REPORTED` and 200 `CLEARED` (with `clearedInvoice`). The request body is `{invoiceHash, uuid, invoice}` with header `Clearance-Status: 0|1`.
+
+**The developer portal's production certificate does not belong to the device key.** On the developer portal, `POST /production/csids` returns a fixed sample certificate (CN `TST-886431145-399999999900003`, serial `1100003803C5F74023B3FC5C5F000100003803`) whatever CSR was used. A document signed with the device key cannot carry that certificate; the signer's self-check rejects the mismatch. So **in the `sandbox` environment only**, the package signs with the compliance certificate (which does belong to the key) and authenticates with the production CSID. ZATCA accepts this with warning `certificate-issuer-name`, and the package records a local warning `SANDBOX_SIGNING_CERTIFICATE`. In `simulation` and `production`, a mismatch makes the device unavailable for issuance (`DeviceUnavailable`); there is no fallback.
+
 Still ⚠ for simulation/production: ZATCA may enforce compliance checks and validate fields more strictly there. M4 adds the checks, and the first simulation onboarding re-verifies this table.
 - Keys "must be marked as non-exportable" from the security module (Req. 6). A software vault with disk/envelope encryption is acceptable under Req. 8. An HSM/KMS signer is supported through the `KeyManagementService` contract.
 - ZATCA relies on the data the taxpayer supplies without further validation (Req. 5), so the console validates every CSR input before submission.
@@ -601,6 +605,8 @@ The outbox, audit, bulk-operation, statistics and settings tables are omitted fr
 | `zatca_settings` | `tenant_id`, `key`, `value` json, `updated_by` | Non-secret settings only |
 
 ### 7.6 Database support
+
+MySQL/MariaDB: every package table is created with **InnoDB** explicitly. This was verified on 2026-11-02: a MariaDB 10.6 server that defaulted to MyISAM silently ignored transactions and row locks, so two processes allocated the same ICV (the ledger unique key refused the duplicate). The migration helper forces InnoDB and `SchemaTest` asserts it.
 
 | Engine | Support | Notes |
 |---|---|---|

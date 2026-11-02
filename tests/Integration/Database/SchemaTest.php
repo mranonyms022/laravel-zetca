@@ -25,6 +25,20 @@ final class SchemaTest extends IntegrationTestCase
         }
     }
 
+    public function test_mysql_tables_use_innodb_even_when_the_server_defaults_to_myisam(): void
+    {
+        if (self::driver() !== 'mysql') {
+            self::markTestSkipped('MySQL / MariaDB only.');
+        }
+
+        $engines = \Illuminate\Support\Facades\DB::table('information_schema.tables')
+            ->where('table_schema', \Illuminate\Support\Facades\DB::getDatabaseName())
+            ->where('table_name', 'like', 'zatca\\_%')
+            ->distinct()->pluck('engine')->all();
+
+        self::assertSame(['InnoDB'], $engines);
+    }
+
     public function test_invoice_table_has_every_status_dimension(): void
     {
         self::assertTrue(Schema::hasColumns('zatca_invoices', [

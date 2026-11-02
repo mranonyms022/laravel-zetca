@@ -51,13 +51,14 @@ final class ZatcaServiceProvider extends ServiceProvider
         $this->app->singleton(TransactionManager::class, static fn (Application $app) => new EloquentTransactionManager($app['db']));
         $this->app->singleton(AdvisoryLock::class, static fn (Application $app) => new CacheAdvisoryLock($app['cache']->store()));
         $this->app->singleton(EventDispatcher::class, static fn (Application $app) => new LaravelEventDispatcher(
-            $app['events'],
+            static fn () => $app['events'],
             $app->make(TransactionManager::class),
         ));
         $this->app->singleton(MetricsCollector::class, NullMetricsCollector::class);
 
         $this->registerSecurity();
         $this->registerDevices();
+        $this->registerProcessing();
 
         $this->app->singleton(TenantResolver::class, static function (Application $app): TenantResolver {
             $class = config('zatca.tenancy.resolver');
@@ -123,6 +124,47 @@ final class ZatcaServiceProvider extends ServiceProvider
         $this->app->bind(CertificateRenewalService::class);
     }
 
+    private function registerProcessing(): void
+    {
+        $app = $this->app;
+        $app->singleton(\CodingTriplets\Zatca\Core\Contracts\Storage\ArtifactStore::class, static fn (Application $app) => new Storage\FilesystemArtifactStore(
+            $app['filesystem'],
+            $app->make(CredentialVault::class),
+            (string) config('zatca.storage.disk', 'local'),
+            (string) config('zatca.storage.root', 'zatca'),
+            (bool) config('zatca.storage.encrypt_local', false),
+        ));
+        $app->singleton(Invoices\SigningCredentialProvider::class, static fn (Application $app) => new Invoices\SigningCredentialProvider(
+            $app->make(Devices\DeviceCredentialStore::class),
+            (int) config('zatca.performance.signing_key_memory_ttl', 300),
+        ));
+        $app->singleton(Invoices\InvoiceGenerators::class);
+        $app->singleton(Invoices\PayloadPreparer::class);
+        $app->singleton(Processing\Outbox\OutboxDispatcher::class, static fn (Application $app) => new Processing\Outbox\OutboxDispatcher(
+            $app['queue'],
+            config('zatca.queues.connection'),
+            (int) config('zatca.queues.high_water_mark', 5000),
+            (int) config('zatca.outbox.lease_seconds', 600),
+        ));
+        $app->singleton(Processing\Submission\CircuitBreaker::class, static fn (Application $app) => new Processing\Submission\CircuitBreaker(
+            $app['cache']->store(),
+            (int) config('zatca.http.circuit.failures', 5),
+            (int) config('zatca.http.circuit.open_seconds', 60),
+        ));
+        $app->bind('zatca.b2c', static fn (Application $app) => new Invoices\InvoiceIssuer(
+            \CodingTriplets\Zatca\Core\Domain\Enums\Workflow::B2C,
+            $app->make(Invoices\InvoiceIntakeService::class),
+            $app->make(Invoices\InvoiceProcessor::class),
+            $app->make(Processing\Submission\SubmissionRunner::class),
+        ));
+        $app->bind('zatca.b2b', static fn (Application $app) => new Invoices\InvoiceIssuer(
+            \CodingTriplets\Zatca\Core\Domain\Enums\Workflow::B2B,
+            $app->make(Invoices\InvoiceIntakeService::class),
+            $app->make(Invoices\InvoiceProcessor::class),
+            $app->make(Processing\Submission\SubmissionRunner::class),
+        ));
+    }
+
     public function boot(): void
     {
         $this->validateConfiguration();
@@ -136,7 +178,18 @@ final class ZatcaServiceProvider extends ServiceProvider
                 Console\DevicesCommand::class,
                 Console\CheckCertificateExpiryCommand::class,
                 Console\VerifyAuditCommand::class,
+                Console\VerifyChainCommand::class,
+                Console\OutboxRelayCommand::class,
+                Console\OutboxPruneCommand::class,
             ]);
+
+            if (config('zatca.outbox.schedule', true)) {
+                $this->callAfterResolving(Schedule::class, static function (Schedule $schedule): void {
+                    $schedule->command('zatca:outbox:relay')->everyMinute()->withoutOverlapping()->onOneServer();
+                    $schedule->command('zatca:outbox:prune')->dailyAt('03:30')->withoutOverlapping()->onOneServer();
+                    $schedule->command('zatca:chain:verify')->dailyAt('02:45')->withoutOverlapping()->onOneServer();
+                });
+            }
 
             if (config('zatca.devices.schedule_expiry_check', true)) {
                 // callAfterResolving works on Laravel 9-13 (no Schedule facade / routes/console.php needed).
@@ -150,6 +203,10 @@ final class ZatcaServiceProvider extends ServiceProvider
         }
 
         $this->loadMigrationsFrom(__DIR__ . '/../../database/migrations');
+
+        if (config('zatca.api.enabled', false)) {
+            $this->loadRoutesFrom(__DIR__ . '/../../routes/api.php');
+        }
 
         $this->warnAboutUnsafeSetups();
     }

@@ -11,7 +11,7 @@ use CodingTriplets\Zatca\Core\Domain\Enums\Environment;
  */
 final class ZatcaManager
 {
-    public const VERSION = '0.3.0-dev';
+    public const VERSION = '0.4.0-dev';
 
     /** @var (\Closure(mixed $user, string $ability): bool)|null */
     private ?\Closure $authCallback = null;
@@ -24,6 +24,18 @@ final class ZatcaManager
     public function defaultEnvironment(): Environment
     {
         return Environment::from((string) config('zatca.environment', 'sandbox'));
+    }
+
+    /** B2C (simplified invoices, reporting). */
+    public function b2c(): \CodingTriplets\Zatca\Laravel\Invoices\InvoiceIssuer
+    {
+        return app('zatca.b2c');
+    }
+
+    /** B2B (standard invoices, clearance). */
+    public function b2b(): \CodingTriplets\Zatca\Laravel\Invoices\InvoiceIssuer
+    {
+        return app('zatca.b2b');
     }
 
     /** Registers the console authorization callback (Horizon-style). */

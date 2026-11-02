@@ -81,7 +81,7 @@ The provider and model are used to build the EGS serial number `1-<provider>|2-<
 | `storage.root` | – | `zatca` | Folder inside the disk |
 | `storage.encrypt_local` | `ZATCA_ENCRYPT_ARTIFACTS` | `false` | App-level encryption for local disks (S3: use SSE-KMS) |
 
-## HTTP, queues and retries **(future)**
+## HTTP, queues and retries
 
 | Key | Default | Notes |
 |---|---|---|
@@ -94,6 +94,14 @@ The provider and model are used to build the EGS serial number `1-<provider>|2-<
 | `retry.b2b` / `retry.b2c` | 10 attempts, exponential | |
 | `retry.b2c_deadline_margin_hours` | 4 | Last automatic B2C attempt this long before the deadline |
 | `b2c.reporting_deadline_hours` | 24 | |
+| `b2c.reporting_mode` | `queue` | `queue`: `issue()` answers in milliseconds and reporting runs on the queue. `sync`: reporting happens inside the request, which adds ZATCA's response time |
+| `http.circuit.failures` / `open_seconds` | 5 / 60 | Per-environment circuit breaker on transport failures |
+| `outbox.schedule` | `true` | Schedules `zatca:outbox:relay` (every minute), plus `zatca:outbox:prune` and `zatca:chain:verify` (daily) |
+| `outbox.max_attempts` | 10 | Handler failures allowed before a message is dead-lettered (CRITICAL `queue` error) |
+| `outbox.lease_seconds` | 600 | A dispatched message whose job has not finished within this time is dispatched again |
+| `outbox.dispatch_on_sync_driver` | `false` | With the `sync` queue driver, messages are left to the relay instead of running inside the request |
+| `performance.advisory_chain_lock` | `false` | Extra cache lock around issuance. Correctness never depends on it |
+| `api.enabled` / `prefix` / `middleware` | `false` / `api/zatca` / `['api']` | Optional HTTP endpoints. Add your own auth middleware |
 | `b2b.require_buyer_identification` | `true` | Reject B2B invoices without buyer VAT or other buyer ID (BR-KSA-81) before using an ICV |
 
 ## Corrections **(future)**
