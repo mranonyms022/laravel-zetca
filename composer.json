@@ -1,0 +1,82 @@
+{
+    "name": "codingtriplets/laravel-zatca",
+    "description": "ZATCA Phase 2 (Fatoora) e-invoicing engine and management console for Laravel: B2B clearance, B2C reporting, device onboarding, ICV/PIH chaining, corrections and audit.",
+    "type": "library",
+    "license": "proprietary",
+    "keywords": ["zatca", "fatoora", "e-invoicing", "saudi", "vat", "laravel", "ubl"],
+    "authors": [
+        {
+            "name": "CodingTriplets Technologies",
+            "email": "nirbhay.skyview@gmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "ext-dom": "*",
+        "ext-json": "*",
+        "ext-libxml": "*",
+        "ext-mbstring": "*",
+        "ext-openssl": "*",
+        "illuminate/bus": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/cache": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/console": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/contracts": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/database": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/events": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/filesystem": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/http": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/queue": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/routing": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/support": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "illuminate/view": "^9.0|^10.0|^11.0|^12.0|^13.0",
+        "guzzlehttp/guzzle": "^7.5",
+        "nesbot/carbon": "^2.62|^3.0",
+        "opis/json-schema": "^2.3",
+        "phpseclib/phpseclib": "^3.0.36",
+        "psr/clock": "^1.0",
+        "psr/http-client": "^1.0",
+        "psr/http-factory": "^1.0",
+        "psr/log": "^1.1|^2.0|^3.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^7.0|^8.0|^9.0|^10.0|^11.0",
+        "phpunit/phpunit": "^9.5.10|^10.0|^11.0|^12.0"
+    },
+    "suggest": {
+        "spatie/laravel-permission": "Role/permission storage for the zatca.* abilities (zatca:permissions:sync).",
+        "laravel/horizon": "Redis queue dashboard; the package's own queue page works without it.",
+        "promphp/prometheus_client_php": "Prometheus metrics adapter.",
+        "league/flysystem-aws-s3-v3": "S3-compatible artifact storage."
+    },
+    "autoload": {
+        "psr-4": {
+            "CodingTriplets\\Zatca\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "CodingTriplets\\Zatca\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "CodingTriplets\\Zatca\\Laravel\\ZatcaServiceProvider"
+            ],
+            "aliases": {
+                "Zatca": "CodingTriplets\\Zatca\\Laravel\\Facades\\Zatca"
+            }
+        }
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite Unit",
+        "test:integration": "phpunit --testsuite Integration",
+        "check:boundary": "php tools/check-core-boundary.php"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

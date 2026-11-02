@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Kept compatible with PHPUnit 9.5 through 12: no schema-version-specific
+  elements (no <source>, no <coverage> includes) are used here.
+-->
+<phpunit bootstrap="vendor/autoload.php"
+         colors="true"
+         cacheResult="false"
+         failOnRisky="true"
+         failOnWarning="true">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <env name="APP_KEY" value="base64:2fl+Ktvkfl+Fuz4Qp/A75G2RTiWVA/ZoKZvp6fiiM10="/>
+        <env name="DB_CONNECTION" value="testing"/>
+        <env name="ZATCA_ENCRYPTION_KEY" value="base64:q3Xg2b0xS9dYQzQyZr0fQm7cJd0b1G3b6m5bJm9tqk8="/>
+    </php>
+</phpunit>
