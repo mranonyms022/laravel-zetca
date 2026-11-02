@@ -40,7 +40,7 @@ Allowed in `VALIDATION_FAILED`, `READY_FOR_PROCESSING`, `FAILED` and `MANUAL_REV
 legal document (issuance) exists. The invoice gets status `CANCELLED` and `closed_at`; nothing is sent to
 ZATCA, and queued work for it is skipped.
 
-## Abandon a rejected invoice ⚠
+## Abandon a rejected invoice ⚠ {#abandon-a-rejected-invoice}
 
 ```php
 Zatca::invoices()->abandon($invoiceId, 'Sale reversed in the POS', auth()->id());

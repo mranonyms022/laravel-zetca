@@ -20,6 +20,11 @@
 | `zatca:invoice correct {invoice} --file=corrected.json --reason= [--actor=]` | Save a corrected version and reissue |
 | `zatca:invoice reissue {invoice} --reason= [--actor=]` | New issuance from the unchanged JSON |
 | `zatca:invoice approve {invoice} --actor=` | Approve a correction (four-eyes) |
+| `zatca:invoice credit {invoice} --file=note.json --reason=` | Credit note for an accepted invoice |
+| `zatca:invoice debit {invoice} --file=note.json --reason=` | Debit note for an accepted invoice |
+| `zatca:invoice cancel {invoice} --reason=` | Full credit note ([Cancelling invoices](/guide/cancellation)) |
+| `zatca:invoice discard {invoice} --reason=` | Close a never-signed invoice (`CANCELLED`) |
+| `zatca:invoice abandon {invoice} --reason=` | Close a rejected invoice (`ABANDONED`) ⚠ |
 
 `{invoice}` is the `invoice_id` (ULID) returned when issuing.
 

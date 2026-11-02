@@ -83,7 +83,16 @@ explicitly; confirm them with ZATCA or your tax advisor.
 | Key | Env | Default | Description |
 |---|---|---|---|
 | `queues.connection` | `ZATCA_QUEUE_CONNECTION` | `null` | Queue connection (`null` = default) |
-| `queues.names.*` | | `zatca-…` | Queue names, see [workers](/guide/workers) |
+| `queues.names.b2c_reporting` | | `zatca-b2c-reporting` | B2C reporting |
+| `queues.names.b2c_retry` | | `zatca-b2c-retry` | B2C retries |
+| `queues.names.b2b_generation` | | `zatca-b2b-generation` | Signing of `b2b()->submit()` invoices |
+| `queues.names.b2b_clearance` | | `zatca-b2b-clearance` | B2B clearance |
+| `queues.names.b2b_retry` | | `zatca-b2b-retry` | B2B retries |
+| `queues.names.b2c_generation` | | `zatca-b2c-generation` | Reserved (B2C is signed in the request) |
+| `queues.names.device_onboarding` | | `zatca-device-onboarding` | Reserved (onboarding runs in the calling process: OTPs are never queued) |
+| `queues.names.device_renewal` | | `zatca-device-renewal` | Reserved |
+| `queues.names.outbox` | | `zatca-outbox` | Reserved |
+| `queues.names.maintenance` | | `zatca-maintenance` | Reserved |
 | `queues.high_water_mark` | | 5000 | Pending submissions before backpressure (`503`) |
 
 ## Retries
@@ -130,6 +139,7 @@ explicitly; confirm them with ZATCA or your tax advisor.
 | `api.enabled` | `ZATCA_API_ENABLED` | `false` | Register the [HTTP API](/guide/http-api) |
 | `api.prefix` | `ZATCA_API_PREFIX` | `api/zatca` | URL prefix |
 | `api.middleware` | | `['api']` | Add your authentication here |
+| `api.batch_max` | | 500 | Reserved: batch endpoint not available yet |
 
 ## Performance
 
@@ -138,6 +148,8 @@ explicitly; confirm them with ZATCA or your tax advisor.
 | `performance.signing_key_memory_ttl` | `ZATCA_SIGNING_KEY_TTL` | 300 | Seconds a decrypted signing key stays in worker memory (0 = off) |
 | `performance.max_in_flight_issuance` | `ZATCA_MAX_IN_FLIGHT_ISSUANCE` | 200 | API: concurrent issuance requests before `429` |
 | `performance.counter_lock_wait_ms` | | 2000 | Wait for a busy device |
+| `performance.max_in_flight_per_device` | | 8 | Reserved: not enforced yet |
+| `performance.shed_when_outbox_lag_seconds` | | 300 | Reserved: not enforced yet |
 | `performance.advisory_chain_lock` | | `false` | Extra cache lock around issuance |
 
 ## Devices
@@ -157,4 +169,5 @@ explicitly; confirm them with ZATCA or your tax advisor.
 
 ## Dashboard (M7, not yet available)
 
-`ui.*` and `authorization.resolver` configure the upcoming dashboard.
+`ui.enabled`, `ui.prefix`, `ui.domain`, `ui.middleware`, `ui.guard`, `ui.route_name_prefix`, `ui.theme` and
+`authorization.resolver` are reserved for the dashboard (M7) and have no effect yet.

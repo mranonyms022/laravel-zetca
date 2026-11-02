@@ -17,18 +17,22 @@ use Illuminate\Console\Command;
  *   zatca:invoice reissue 01J... --reason="signature fixed"
  *   zatca:invoice correct 01J... --file=corrected.json --reason="wrong VAT category"
  *   zatca:invoice approve 01J... --actor=7
+ *   zatca:invoice credit  01J... --file=note.json --reason="returned"   (also: debit)
+ *   zatca:invoice cancel  01J... --reason="order cancelled"            (full credit note)
+ *   zatca:invoice discard 01J... --reason="entered twice"              (never signed)
+ *   zatca:invoice abandon 01J... --reason="sale reversed"              (rejected)
  */
 final class InvoiceActionCommand extends Command
 {
     protected $signature = 'zatca:invoice
-        {action : show | retry | reissue | correct | approve}
+        {action : show | retry | reissue | correct | approve | credit | debit | cancel | discard | abandon}
         {invoice : Invoice ID (public ULID)}
-        {--reason= : Required for reissue and correct}
-        {--file= : Corrected JSON payload (correct)}
+        {--reason= : Required for reissue, correct, credit, debit, cancel, discard and abandon}
+        {--file= : JSON payload (correct, credit, debit)}
         {--actor= : User ID recorded as the actor}
         {--now : retry: submit immediately instead of queuing}';
 
-    protected $description = 'Show, retry, reissue, correct or approve one invoice';
+    protected $description = 'Show, retry, reissue, correct, approve, credit, debit, cancel, discard or abandon one invoice';
 
     public function handle(InvoiceOperations $operations): int
     {
@@ -60,6 +64,8 @@ final class InvoiceActionCommand extends Command
                     return self::SUCCESS;
 
                 case 'correct':
+                case 'credit':
+                case 'debit':
                     $file = (string) $this->option('file');
                     $payload = is_file($file) ? json_decode((string) file_get_contents($file), true) : null;
                     if (! is_array($payload)) {
@@ -67,7 +73,26 @@ final class InvoiceActionCommand extends Command
 
                         return self::INVALID;
                     }
-                    $this->printResult($operations->correct($id, $payload, (string) $this->option('reason'), $actor)->toArray());
+                    $reason = (string) $this->option('reason');
+                    $result = match ((string) $this->argument('action')) {
+                        'correct' => $operations->correct($id, $payload, $reason, $actor),
+                        'credit' => $operations->creditNote($id, $payload, $reason, $actor),
+                        default => $operations->debitNote($id, $payload, $reason, $actor),
+                    };
+                    $this->printResult($result->toArray());
+
+                    return self::SUCCESS;
+
+                case 'cancel':
+                    $this->printResult($operations->cancel($id, (string) $this->option('reason'), $actor)->toArray());
+
+                    return self::SUCCESS;
+
+                case 'discard':
+                case 'abandon':
+                    $action = (string) $this->argument('action');
+                    $invoice = $operations->{$action}($id, (string) $this->option('reason'), $actor);
+                    $this->info("Invoice {$id}: {$invoice->processing_status->value}");
 
                     return self::SUCCESS;
 

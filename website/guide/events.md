@@ -20,6 +20,10 @@ cleared invoice to the buyer, updating your order status.
 | `InvoiceReportingDeadlineAtRisk` | B2C invoice still unreported `hoursLeft` hours before the deadline |
 | `InvoiceReportingDeadlineBreached` | B2C 24-hour deadline passed |
 | `ClearanceDeactivated` | ZATCA answered 303; the document is reported instead |
+| `InvoiceCancelled` | Cancelled (`kind`: `credit_note`, `discarded`, `abandoned`) — see [Cancelling invoices](./cancellation) |
+
+Every invoice event also carries `sourceType` / `sourceId`, the record of your own you linked with
+[`source`](./host-models).
 
 ## Device events
 

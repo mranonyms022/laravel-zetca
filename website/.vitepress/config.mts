@@ -23,10 +23,12 @@ export default defineConfig({
           text: 'Getting started',
           items: [
             { text: 'Introduction', link: '/guide/introduction' },
+            { text: 'Features at a glance', link: '/guide/features' },
             { text: 'Key concepts', link: '/guide/concepts' },
             { text: 'Requirements', link: '/guide/requirements' },
             { text: 'Installation', link: '/guide/installation' },
             { text: 'Quick start (sandbox)', link: '/guide/quick-start' },
+            { text: 'Test plan (sandbox)', link: '/guide/testing' },
           ],
         },
         {

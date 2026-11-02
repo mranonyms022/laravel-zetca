@@ -126,11 +126,11 @@ return [
     ],
 
     'api' => [
-        // Optional HTTP endpoints (POST {prefix}/b2c/invoices, /b2c/invoices/batch, GET {prefix}/invoices/{id}).
+        // Optional HTTP endpoints (POST {prefix}/b2c/invoices, POST {prefix}/b2b/invoices, GET {prefix}/invoices/{id}).
         'enabled' => env('ZATCA_API_ENABLED', false),
         'prefix' => env('ZATCA_API_PREFIX', 'api/zatca'),
         'middleware' => ['api'],
-        'batch_max' => 500,
+        'batch_max' => 500,   // reserved: batch endpoint not implemented yet
     ],
 
     'performance' => [
@@ -139,12 +139,12 @@ return [
         'signing_key_memory_ttl' => env('ZATCA_SIGNING_KEY_TTL', 300),
         // Load shedding: answer 429/503 + Retry-After instead of letting requests pile up.
         'max_in_flight_issuance' => env('ZATCA_MAX_IN_FLIGHT_ISSUANCE', 200),
-        'max_in_flight_per_device' => 8,
+        'max_in_flight_per_device' => 8,   // reserved: not enforced yet
         'counter_lock_wait_ms' => 2000,
         // Extra cache lock around issuance (Redis recommended). Correctness never depends on it: the counter row
         // lock + compare-and-set + ledger unique keys do. Off by default (the DB row lock queues waiters efficiently).
         'advisory_chain_lock' => false,
-        'shed_when_outbox_lag_seconds' => 300,
+        'shed_when_outbox_lag_seconds' => 300,   // reserved: not enforced yet
     ],
 
     'b2b' => [

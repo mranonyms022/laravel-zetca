@@ -267,6 +267,19 @@ final class LinesSourceCancellationTest extends IntegrationTestCase
         self::assertSame('23.00', $original->creditableAmount());
     }
 
+    public function test_invoice_command_cancels_and_discards(): void
+    {
+        $original = $this->acceptedInvoice('POS-K1');
+        $this->artisan('zatca:invoice', ['action' => 'cancel', 'invoice' => $original->public_id, '--reason' => 'Order cancelled'])
+            ->expectsOutputToContain('"invoice_id"')->assertExitCode(0);
+        self::assertNotNull($original->refresh()->cancellation_invoice_id);
+
+        $draft = $this->zatca()->b2b()->submit($this->payload('B2B-K2') + $this->b2bExtras(), ['device' => $this->device->id])->toArray();
+        $this->artisan('zatca:invoice', ['action' => 'discard', 'invoice' => $draft['invoice_id'], '--reason' => 'Twice'])
+            ->expectsOutputToContain('CANCELLED')->assertExitCode(0);
+        $this->artisan('zatca:invoice', ['action' => 'abandon', 'invoice' => $draft['invoice_id'], '--reason' => 'x'])->assertExitCode(1);
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private function acceptedInvoice(string $number, array $extra = []): Invoice

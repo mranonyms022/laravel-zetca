@@ -93,6 +93,8 @@ php artisan zatca:invoice show 01M6E1Y8WXFJ0RK6YXMP4JN9WX
 
 ## Next steps
 
+- [Test plan](./testing): try every feature step by step in the sandbox.
+
 - [Invoice payload](./payload): every field you can send.
 - [B2B invoices](./b2b): clearance for business customers.
 - [Rejections and corrections](./corrections): what to do when ZATCA says no.

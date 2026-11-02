@@ -1,0 +1,5 @@
+company_id,store_id,name,invoice_types,industry,location
+C-100,S-1,POS-01,0100,Retail,Riyadh
+C-100,S-2,POS-02,0100,Retail,Dammam
+C-100,S-1,ERP-01,1000,Retail,Riyadh
+C-100,S-9,POS-09,0100,Retail,Riyadh

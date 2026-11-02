@@ -32,11 +32,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
   - CSV built in, XLSX/ODS with the optional `openspout/openspout`;
   - files from a path or a filesystem disk;
   - per-row `DeviceImportReport`. OTPs are never stored, queued, logged or reported.
-- `zatca:devices:import` command.
+- `zatca:devices:import` command; `zatca:invoice credit|debit|cancel|discard|abandon` actions.
+- User guide: sandbox test plan, features overview, sample device file.
 - Migration `2026_11_03_000006_add_zatca_lines_source_and_cancellation`.
 
 ### Fixed
 - Docs: `lines[].discount` is a per-unit discount (BT-147), not a line total.
+- Config: unused keys (`api.batch_max`, `performance.max_in_flight_per_device`,
+  `performance.shed_when_outbox_lag_seconds`, reserved queue names, `ui.*`) are documented as reserved;
+  the API comment no longer mentions a batch endpoint.
 
 ## [0.5.0-alpha.1] - not yet tagged
 
