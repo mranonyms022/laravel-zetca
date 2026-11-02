@@ -5,6 +5,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- `composer.json` now requires `guzzlehttp/psr7` ^2.0. With older dependency sets Composer could install
+  psr7 1.x, which lacks `HttpFactory`, and every call to ZATCA failed with "Class not found".
+
 ### Added (M7c — dashboard, part 3)
 - Correction editor: current vs corrected JSON, *Check only* (dry run through the new
   `InvoiceOperations::previewCorrection()`), save with a reason (new version + new document).
