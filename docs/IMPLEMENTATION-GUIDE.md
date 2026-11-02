@@ -415,7 +415,7 @@ Other hosts (Netlify, Vercel, Cloudflare Pages): build command `npm run build`, 
 | Milestone | Content |
 |---|---|
 | M6.1 | Done: discounts, stored lines, source link, cancellation, device import |
-| M7 | Web dashboard. M7a (lists, detail, actions, roles) and M7b (devices, companies, errors, queue, audit, settings) done; M7c (correction editor, note forms, charts, reports) next |
+| M7 | Web dashboard: done (M7a lists, detail, actions, roles; M7b devices, companies, errors, queue, audit, settings; M7c correction editor, note forms, reports, charts, exports) |
 | M8 | Release: benchmarks, PostgreSQL/MySQL/SQL Server CI runs, simulation verification, 1.0 |
 
 Until 1.0, pin a minor version (`^0.6`) and read the changelog before upgrading.

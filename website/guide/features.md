@@ -63,6 +63,8 @@ rule not yet confirmed in official documentation.
 | Web dashboard: overview, B2B/B2C lists, invoice detail, actions, XML download, permissions | `/admin/zatca`, `Zatca::auth()` | [Dashboard](./dashboard) |
 | Dashboard: devices (register, import from Excel/CSV, onboard and renew with an OTP), companies and stores | `/admin/zatca/devices` | [Dashboard](./dashboard#devices) |
 | Dashboard: errors and error groups (resolve with a note), queue monitor, audit history, settings | `/admin/zatca/errors` | [Dashboard](./dashboard#errors-warnings) |
+| Dashboard: correction editor, credit/debit note forms | invoice page | [Dashboard](./dashboard#correction-editor) |
+| Dashboard: reports with charts, VAT summary, CSV exports | `/admin/zatca/reports` | [Dashboard](./dashboard#reports) |
 | Audit trail of every operator action (hash-chained) | `zatca:audit:verify` | [Security](./security) |
 
 ## Reliability and security
@@ -80,6 +82,5 @@ rule not yet confirmed in official documentation.
 
 | Feature | Planned |
 |---|---|
-| Dashboard: correction editor, note forms, charts, reports and exports | M7c |
 | Batch HTTP endpoint, per-device in-flight limit | later; the config keys exist but are not used yet |
 | Prepaid amounts, currencies other than SAR | later |

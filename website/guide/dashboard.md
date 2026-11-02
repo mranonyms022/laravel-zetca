@@ -2,15 +2,9 @@
 
 A web dashboard for your operators: invoices and their actions, devices (register, import from Excel/CSV,
 onboard with an OTP, renew), companies and stores, errors, the queue backlog, the audit history and the
-active settings. It is plain Blade with one prebuilt CSS file — no JavaScript
+active settings, a correction editor, credit/debit note forms, reports with charts and CSV exports. It is plain Blade with one prebuilt CSS file — no JavaScript
 and no build step in your application.
 
-::: info Being built in parts
-**Available now:** overview, B2B and B2C lists, invoice detail, invoice actions, signed/cleared XML
-download, permissions (M7a); devices with file import and OTP onboarding, companies and stores, errors and
-error groups, queue monitor, audit history, settings (M7b).
-**Coming (M7c):** correction editor, credit/debit note forms, charts, reports and exports.
-:::
 
 ## Open it
 
@@ -54,7 +48,11 @@ Every page and every action checks a permission. Nobody gets access until you gr
 | `zatca.audit.view` | Audit history and the tamper-chain check |
 | `zatca.settings.manage` | Settings page (read-only view of the configuration) |
 
-`zatca.reports.view` and `zatca.logs.view` are reserved for the M7c pages.
+| `zatca.reports.view` | Reports page and the VAT summary CSV |
+
+`zatca.invoices.correct` also opens the correction editor and the credit/debit note forms;
+`zatca.invoices.export` also allows the CSV exports of documents. `zatca.logs.view` and
+`zatca.credentials.manage` are not used by any page yet.
 
 The package decides in this order:
 
@@ -122,6 +120,59 @@ recorded as the actor (numeric user IDs; approvals need one).
 
 See [Cancelling invoices](./cancellation) and [Rejections and corrections](./corrections) for what each
 does.
+
+### Correction editor
+
+**Correct JSON** appears on invoices that can be corrected: rejected by ZATCA, or never signed (validation
+failed, failed before signing, manual review). It needs `zatca.invoices.correct`.
+
+- Left: the current JSON (read-only). Right: the corrected JSON, prefilled with the current one. Open
+  errors of the invoice are listed above, so you see what to fix.
+- **Check only** runs the same validation as saving and lists errors and warnings. Nothing is saved.
+- **Save correction and send** requires a reason. It stores a new JSON version (the original and earlier
+  versions never change) and then:
+  - for a rejected invoice, signs a **new document**: new UUID, next counter (ICV), current previous-hash;
+    the rejected document stays in the chain;
+  - for a never-signed invoice, signs and sends it as usual.
+- With `correction.four_eyes` on, the correction waits for another user's **Approve correction**.
+- Invalid JSON or an invalid invoice saves nothing.
+
+Same rules as [`Zatca::invoices()->correct()`](./corrections#b-correct-and-reprocess).
+
+### Credit and debit notes
+
+**Credit note** and **Debit note** appear on accepted invoices (reported / cleared). Enter the note number
+(prefilled, e.g. `INV-7-CN1`), the reason and the lines as JSON (the credit form is prefilled with the
+invoice's lines; edit them to what is credited). The page shows how much can still be credited; a credit
+note above that is refused before anything is signed. Buyer and supply date are copied from the invoice.
+To credit the full invoice use **Cancel (credit note)** instead. See [Credit and debit notes](./notes).
+
+### Reports
+
+*Reports* (`zatca.reports.view`), by invoice date, up to 366 days, filtered by workflow, company and
+device:
+
+- **Documents per day** for B2B and B2C: cleared/reported, pending, rejected or failed (bar chart; hover a
+  bar for the numbers, or *Show as table*). The overview page shows the last 14 days the same way.
+- **VAT summary**: count, amount excluding VAT, VAT and amount including VAT of **accepted** documents
+  per type, and the net (invoices + debit notes − credit notes). A working figure: reconcile it with your
+  accounting before filing your VAT return.
+- **Devices**: the 20 busiest devices with accepted and rejected/failed counts.
+- **Errors by category** in the period.
+
+### Exports (CSV)
+
+| Export | Where | Permission |
+|---|---|---|
+| VAT summary | *Reports* → Download VAT summary | `zatca.reports.view` |
+| All documents of the report period | *Reports* → Download all documents | `zatca.reports.view` + `zatca.invoices.export` |
+| The current B2B or B2C list (tab, search, filters) | List → Export this list | workflow view + `zatca.invoices.export` |
+
+Files are UTF-8 with a BOM (Excel shows Arabic correctly). Columns of the document export: invoice ID,
+workflow, type, invoice number, external ID, date, device, buyer VAT number, currency, totals, statuses,
+UUID, billing reference, first issued at. Text that would start a spreadsheet formula (`=`, `+`, `-`, `@`)
+gets a leading apostrophe. No keys, XML or QR data are exported. Large exports are streamed in chunks of
+1,000.
 
 ### Devices
 
@@ -191,6 +242,8 @@ is reviewed and versioned. Encryption keys, credentials and certificates are nev
 - No page shows private keys, certificate secrets or OTPs; they are not even loaded.
 - OTPs typed into the dashboard go straight to ZATCA: never flashed back to the form, stored or logged.
 - Uploaded device files are deleted from the server right after reading.
+- The correction editor keeps your draft in the session when validation fails. With the `cookie` session
+  driver (4 KB limit) large invoices cannot be kept; use `file`, `database` or `redis` sessions.
 - XML downloads are streamed after a permission check, never from a public URL, with `Cache-Control: no-store`.
 - Every form is protected by Laravel's CSRF check (`web` middleware).
 - Tenancy applies: users only see the invoices of the current tenant.
@@ -228,4 +281,5 @@ Suggested roles (as in the architecture document):
 | zatca.audit.view | | | | ✓ | | ✓ |
 | zatca.companies.view | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | zatca.companies.manage | | | | | | ✓ |
+| zatca.reports.view | ✓ | ✓ | ✓ | ✓ | | ✓ |
 | zatca.settings.manage | | | | | | ✓ |

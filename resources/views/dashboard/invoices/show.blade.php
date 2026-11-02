@@ -42,8 +42,23 @@
         </div>
     </div>
 
-    @if ($actions !== [])
+    @php
+        $editorLinks = [];
+        if ($can(\CodingTriplets\Zatca\Laravel\Dashboard\Abilities::INVOICES_CORRECT, $invoice)) {
+            if (\CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\InvoiceEditorController::canCorrect($invoice)) {
+                $editorLinks[] = [$zroute('invoices.correct', $invoice->public_id), 'Correct JSON'];
+            }
+            if (\CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\InvoiceEditorController::canIssueNotes($invoice)) {
+                $editorLinks[] = [$zroute('invoices.note', ['publicId' => $invoice->public_id, 'kind' => 'credit']), 'Credit note'];
+                $editorLinks[] = [$zroute('invoices.note', ['publicId' => $invoice->public_id, 'kind' => 'debit']), 'Debit note'];
+            }
+        }
+    @endphp
+    @if ($actions !== [] || $editorLinks !== [])
         <div class="flex flex-wrap gap-2">
+            @foreach ($editorLinks as [$href, $label])
+                <a href="{{ $href }}" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800">{{ $label }}</a>
+            @endforeach
             @foreach ($actions as $action)
                 @php [$label, $help, $needsReason, $color] = $actionInfo[$action]; @endphp
                 <details class="relative">

@@ -185,21 +185,22 @@ final class InvoiceOperations
     // ------------------------------------------------------------------ B. Correct & reprocess
 
     /**
-     * Save a corrected JSON version (append-only; the original stays) and, unless approval is required,
-     * reprocess it. For a rejected document this creates issuance n+1 with a new UUID, the next ICV and the
-     * chain-head PIH. The rejected document stays in the chain.
+     * Dry run of a correction: the same checks and validation as correct(), nothing is saved or signed.
      *
      * @param array<string, mixed> $payload the full corrected invoice JSON
-     * @throws InvoiceValidationException nothing is saved when the correction is invalid
+     * @throws OperationNotAllowed when the invoice cannot be corrected in its current state
      */
-    private function performCorrect(Invoice|string $invoice, array $payload, string $reason, ?int $actorId = null): IssueResult
+    public function previewCorrection(Invoice|string $invoice, array $payload): ValidationResult
     {
-        $invoice = $this->find($invoice);
-        $reason = trim($reason);
-        if ($reason === '') {
-            throw new \InvalidArgumentException('A reason is required for every correction.');
-        }
+        return $this->prepareCorrection($this->find($invoice), $payload)['validation'];
+    }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @return array{issuance: ?InvoiceIssuance, invoice_number: string, prepared: array<string, mixed>, validation: ValidationResult}
+     */
+    private function prepareCorrection(Invoice $invoice, array $payload): array
+    {
         $issuance = $this->currentIssuance($invoice);
         $policy = $this->policies->for($invoice->workflow);
         $this->assertCorrectable($invoice, $issuance);
@@ -226,6 +227,28 @@ final class InvoiceOperations
         $device = Device::query()->withoutGlobalScopes()->findOrFail($invoice->device_id);
         $prepared = $this->preparer->prepare($payload, $invoice->workflow, $device, $invoiceNumber);
         $validation = $this->generators->for($invoice->workflow)->validate($prepared);
+
+        return ['issuance' => $issuance, 'invoice_number' => $invoiceNumber, 'prepared' => $prepared, 'validation' => $validation];
+    }
+
+
+    /**
+     * Save a corrected JSON version (append-only; the original stays) and, unless approval is required,
+     * reprocess it. For a rejected document this creates issuance n+1 with a new UUID, the next ICV and the
+     * chain-head PIH. The rejected document stays in the chain.
+     *
+     * @param array<string, mixed> $payload the full corrected invoice JSON
+     * @throws InvoiceValidationException nothing is saved when the correction is invalid
+     */
+    private function performCorrect(Invoice|string $invoice, array $payload, string $reason, ?int $actorId = null): IssueResult
+    {
+        $invoice = $this->find($invoice);
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new \InvalidArgumentException('A reason is required for every correction.');
+        }
+
+        ['issuance' => $issuance, 'invoice_number' => $invoiceNumber, 'prepared' => $prepared, 'validation' => $validation] = $this->prepareCorrection($invoice, $payload);
         if (! $validation->isValid()) {
             throw InvoiceValidationException::fromResult($validation);
         }

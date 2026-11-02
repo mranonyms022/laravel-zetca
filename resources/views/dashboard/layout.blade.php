@@ -25,6 +25,7 @@
         ['devices.index', [], 'Devices', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::DEVICES_VIEW, 'devices'],
         ['companies.index', [], 'Companies & stores', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::COMPANIES_VIEW, 'companies'],
         ['errors.index', [], 'Errors & warnings', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::ERRORS_VIEW, 'errors'],
+        ['reports', [], 'Reports', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::REPORTS_VIEW, 'reports'],
         ['queue', [], 'Queue monitor', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::QUEUE_VIEW, 'queue'],
         ['audit', [], 'Audit history', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::AUDIT_VIEW, 'audit'],
         ['settings', [], 'Settings', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::SETTINGS_MANAGE, 'settings'],

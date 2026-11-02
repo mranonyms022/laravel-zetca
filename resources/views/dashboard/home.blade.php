@@ -58,6 +58,13 @@
                         </a>
                     @endforeach
                 </dl>
+                <div class="mt-4">
+                    @include('zatca::dashboard.partials.daily-chart', [
+                        'days' => $daily[$flow],
+                        'title' => 'Last 14 days',
+                        'labels' => ['accepted' => $flow === 'b2b' ? 'Cleared' : 'Reported', 'pending' => 'Pending', 'problem' => 'Rejected / failed'],
+                    ])
+                </div>
             </section>
         @endif
     @endforeach

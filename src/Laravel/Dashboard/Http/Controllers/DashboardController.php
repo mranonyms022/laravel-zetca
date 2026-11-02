@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers;
 
 use CodingTriplets\Zatca\Laravel\Dashboard\Queries\DashboardStats;
+use CodingTriplets\Zatca\Laravel\Dashboard\Queries\ReportQuery;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 
@@ -18,6 +19,8 @@ final class DashboardController
         return view('zatca::dashboard.home', [
             'stats' => $stats->summary($since),
             'period' => $period,
+            // last 14 days by invoice date, for the small charts under each workflow panel
+            'daily' => (new ReportQuery(['from' => now()->subDays(13)->toDateString(), 'to' => now()->toDateString()]))->daily(),
         ]);
     }
 }

@@ -5,6 +5,15 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (M7c — dashboard, part 3)
+- Correction editor: current vs corrected JSON, *Check only* (dry run through the new
+  `InvoiceOperations::previewCorrection()`), save with a reason (new version + new document).
+- Credit and debit note forms with the remaining creditable amount; over-credit refused before signing.
+- Reports: documents per day (server-rendered SVG charts, no JavaScript), VAT summary of accepted documents
+  with net, top devices, errors by category; 14-day charts on the overview.
+- CSV exports: VAT summary, all documents of a period, the current B2B/B2C list (streamed, UTF-8 BOM,
+  formula-injection safe).
+
 ### Added (M7b — dashboard, part 2)
 - Devices: list, detail (certificates without secrets, counter, onboarding and renewal history), register,
   import from CSV/XLSX/ODS with a check-only mode, onboard / resume / renew with an OTP typed in the browser

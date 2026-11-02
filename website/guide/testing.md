@@ -212,6 +212,14 @@ them, see [Dashboard](./dashboard#who-may-do-what)).
 | 12.17 | *Queue monitor* with the workers stopped, then issue a B2C invoice | *Pending* goes up; start the workers, reload → back to 0 |
 | 12.18 | *Audit history* → *Verify tamper chain* | "Audit chain intact"; your onboarding, cancel and resolve actions are listed with your user ID |
 | 12.19 | *Settings* | Your configuration; no encryption key or credential anywhere |
+| 12.20 | Open a rejected invoice (step 10) → *Correct JSON* → change the cause → *Check only* | "The corrected JSON is valid. Nothing was saved yet." |
+| 12.21 | *Save correction and send* with a reason | *JSON versions* shows v2 with your reason; *Issuances* shows a second document with a new UUID and the next counter |
+| 12.22 | On a reported invoice → *Credit note*, change a quantity, issue | A 381 document linked to the invoice; *Credited* on the invoice summary |
+| 12.23 | *Credit note* with more than the remaining amount | Refused ("exceeds the amount that can still be credited"); nothing issued |
+| 12.24 | *Debit note* with one extra line | A 383 document linked to the invoice |
+| 12.25 | *Reports* (last 30 days) | Daily bars for B2B and B2C; VAT summary net = invoices + debit − credit |
+| 12.26 | *Download VAT summary* and *Download all documents*; open in Excel | Arabic text readable; one row per document |
+| 12.27 | B2C list → tab *Rejected* → *Export this list* | Only the rejected documents |
 
 ## 13. Security checks
 

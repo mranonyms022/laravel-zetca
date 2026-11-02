@@ -10,7 +10,13 @@
 @section('section', $flow)
 
 @section('content')
-<h2 class="mb-4 text-xl font-semibold">{{ $title }}</h2>
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <h2 class="text-xl font-semibold">{{ $title }}</h2>
+    @if ($can(\CodingTriplets\Zatca\Laravel\Dashboard\Abilities::INVOICES_EXPORT))
+        <a href="{{ $zroute('invoices.export', array_filter(['workflow' => $flow] + \Illuminate\Support\Arr::except($filters, ['page']), static fn ($v) => $v !== null && $v !== '')) }}"
+           class="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">Export this list (CSV)</a>
+    @endif
+</div>
 
 <div class="mb-4 flex flex-wrap gap-1 border-b border-slate-200 dark:border-slate-800">
     @foreach ($tabs as $key => $t)

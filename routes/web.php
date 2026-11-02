@@ -9,7 +9,9 @@ use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\DashboardController;
 use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\DeviceController;
 use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\ErrorController;
 use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\InvoiceController;
+use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\InvoiceEditorController;
 use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\OperationsController;
+use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\ReportController;
 use Illuminate\Support\Facades\Route;
 
 // Dashboard (zatca.ui.enabled). Your authentication comes from zatca.ui.middleware; every route also checks a
@@ -32,6 +34,19 @@ $group->group(static function (): void {
         ->middleware('zatca.can:' . Abilities::DASHBOARD_VIEW);
     Route::get('invoice/{publicId}', [InvoiceController::class, 'show'])->name('invoices.show')
         ->where('publicId', '[0-9A-Za-z]{26}');
+    Route::get('invoices/{workflow}/export.csv', [ReportController::class, 'exportList'])->name('invoices.export')
+        ->where('workflow', 'b2b|b2c');
+
+    // Correction editor and note forms: registered before the generic action route below.
+    Route::get('invoice/{publicId}/correct', [InvoiceEditorController::class, 'edit'])->name('invoices.correct')
+        ->where('publicId', '[0-9A-Za-z]{26}');
+    Route::post('invoice/{publicId}/correct', [InvoiceEditorController::class, 'update'])->name('invoices.correct.update')
+        ->where('publicId', '[0-9A-Za-z]{26}');
+    Route::get('invoice/{publicId}/note/{kind}', [InvoiceEditorController::class, 'noteForm'])->name('invoices.note')
+        ->where(['publicId' => '[0-9A-Za-z]{26}', 'kind' => 'credit|debit']);
+    Route::post('invoice/{publicId}/note/{kind}', [InvoiceEditorController::class, 'issueNote'])->name('invoices.note.store')
+        ->where(['publicId' => '[0-9A-Za-z]{26}', 'kind' => 'credit|debit']);
+
     Route::post('invoice/{publicId}/{action}', [InvoiceController::class, 'action'])->name('invoices.action')
         ->where(['publicId' => '[0-9A-Za-z]{26}', 'action' => '[a-z]+']);
     Route::get('invoice/{publicId}/artifact/{artifactId}', [InvoiceController::class, 'artifact'])->name('invoices.artifact')
@@ -57,6 +72,10 @@ $group->group(static function (): void {
     Route::get('errors/warnings', [ErrorController::class, 'warnings'])->name('errors.warnings');
     Route::post('errors/{error}/resolve', [ErrorController::class, 'resolve'])->name('errors.resolve')->whereNumber('error');
     Route::post('errors/groups/{group}/resolve', [ErrorController::class, 'resolveGroup'])->name('errors.groups.resolve')->whereNumber('group');
+
+    Route::get('reports', [ReportController::class, 'index'])->name('reports');
+    Route::get('reports/vat.csv', [ReportController::class, 'exportVat'])->name('reports.vat');
+    Route::get('reports/invoices.csv', [ReportController::class, 'exportInvoices'])->name('reports.invoices');
 
     Route::get('queue', [OperationsController::class, 'queue'])->name('queue');
     Route::get('audit', [OperationsController::class, 'audit'])->name('audit');
