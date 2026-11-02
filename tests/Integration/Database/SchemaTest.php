@@ -16,6 +16,7 @@ final class SchemaTest extends IntegrationTestCase
         'b2b_clearance_submissions', 'b2c_reporting_submissions', 'submission_attempts',
         'error_groups', 'errors', 'warnings', 'processing_logs', 'audit_logs',
         'outbox', 'bulk_operations', 'bulk_operation_items', 'stats_daily', 'settings',
+        'invoice_lines', 'invoice_vat_breakdown',
     ];
 
     public function test_all_package_tables_are_created_with_the_default_prefix(): void

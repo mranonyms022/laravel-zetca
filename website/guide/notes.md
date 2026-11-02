@@ -24,7 +24,8 @@ $result = Zatca::invoices()->creditNote($originalInvoiceId, [
 ], reason: 'Item returned by the customer', actorId: auth()->id());
 ```
 
-To cancel the whole invoice, repeat all of its lines in the credit note.
+To cancel the whole invoice in one call, use [`cancel()`](./cancellation#cancel-an-accepted-invoice): it
+builds the full credit note from the original for you.
 
 ## Issue a debit note
 
@@ -55,4 +56,8 @@ an invoice.
 - The original must be an **invoice** (not a note) and must be **accepted** by ZATCA. For a rejected
   invoice, [correct it](./corrections#b-correct-and-reprocess) instead.
 - The note has the same idempotency as an invoice: sending the same note number again returns the first result.
+- **Credit limit:** the credit notes of an invoice can never add up to more than its total plus its debit
+  notes. A note that would exceed it is refused with `OperationNotAllowed` before anything is signed.
+  `$invoice->creditableAmount()` returns what can still be credited; `credited_amount` and
+  `debited_amount` on the original are kept up to date (rejected or abandoned notes don't count).
 - The result has the same shape as for invoices (`qr`, `counter`, `uuid`, `invoice_id`, …).

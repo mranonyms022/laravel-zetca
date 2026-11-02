@@ -50,7 +50,7 @@ final class InvoiceIntakeService
 
     /**
      * @param array<string, mixed> $payload
-     * @param array{device?: int|string|Device, external_id?: string, actor_id?: ?int, queue_processing?: bool, billing_reference_invoice_id?: int} $options
+     * @param array{device?: int|string|Device, external_id?: string, actor_id?: ?int, queue_processing?: bool, billing_reference_invoice_id?: int, source?: \Illuminate\Database\Eloquent\Model|array{type: string, id: int|string}} $options
      */
     public function receive(Workflow $workflow, array $payload, array $options = []): IntakeResult
     {
@@ -89,6 +89,30 @@ final class InvoiceIntakeService
         }
 
         return new IntakeResult($invoice, true, $validation);
+    }
+
+    /**
+     * The host application's record: an Eloquent model (any table) or ['type' => ..., 'id' => ...].
+     *
+     * @return array{0: ?string, 1: ?string}
+     */
+    public static function source(mixed $source): array
+    {
+        if ($source instanceof \Illuminate\Database\Eloquent\Model) {
+            if ($source->getKey() === null) {
+                throw new \InvalidArgumentException('The source model must be saved (it has no key).');
+            }
+
+            return [mb_substr($source->getMorphClass(), 0, 191), mb_substr((string) $source->getKey(), 0, 64)];
+        }
+        if (is_array($source) && isset($source['type'], $source['id']) && (string) $source['id'] !== '') {
+            return [mb_substr((string) $source['type'], 0, 191), mb_substr((string) $source['id'], 0, 64)];
+        }
+        if ($source !== null) {
+            throw new \InvalidArgumentException("The 'source' option must be an Eloquent model or ['type' => ..., 'id' => ...].");
+        }
+
+        return [null, null];
     }
 
     /**
@@ -137,6 +161,8 @@ final class InvoiceIntakeService
             'warning_count' => count($validation->warnings()),
             'created_by' => $options['actor_id'] ?? null,
             'billing_reference_invoice_id' => $options['billing_reference_invoice_id'] ?? null,
+            'source_type' => self::source($options['source'] ?? null)[0],
+            'source_id' => self::source($options['source'] ?? null)[1],
             'status_changed_at' => now(),
         ]);
         $invoice->save();

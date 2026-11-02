@@ -11,6 +11,9 @@ final class ClearanceDeactivated
         public readonly int $invoiceId,
         public readonly string $publicId,
         public readonly int $issuanceId,
+        /** The host application's record (`source` option): morph class and key. */
+        public readonly ?string $sourceType = null,
+        public readonly ?string $sourceId = null,
     ) {
     }
 }

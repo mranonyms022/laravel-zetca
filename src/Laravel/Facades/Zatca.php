@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static \CodingTriplets\Zatca\Laravel\Invoices\InvoiceIssuer b2c()
  * @method static \CodingTriplets\Zatca\Laravel\Invoices\InvoiceIssuer b2b()
  * @method static \CodingTriplets\Zatca\Laravel\Invoices\InvoiceOperations invoices()
+ * @method static \CodingTriplets\Zatca\Laravel\Devices\CompanyService companies()
+ * @method static \CodingTriplets\Zatca\Laravel\Devices\DeviceService devices()
  *
  * @see ZatcaManager
  */

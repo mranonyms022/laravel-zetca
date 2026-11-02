@@ -22,6 +22,7 @@ explicitly; confirm them with ZATCA or your tax advisor.
 | `database.table_prefix` | `ZATCA_TABLE_PREFIX` | `zatca_` | Lowercase, max 16 characters |
 | `database.foreign_keys` | `ZATCA_DB_FOREIGN_KEYS` | `true` | Set `false` only for partitioned MySQL tables |
 | `database.max_payload_bytes` | | 1 MiB | Maximum invoice JSON size |
+| `database.store_lines` | `ZATCA_STORE_LINES` | `true` | Store calculated lines and VAT breakdown per document |
 
 ## Tenancy
 

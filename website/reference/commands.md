@@ -9,6 +9,7 @@
 | `zatca:device:onboard {device} [--resume]` | Onboard with an OTP (asked as hidden input). `--resume` continues after failed compliance checks |
 | `zatca:device:renew {device}` | Renew the production certificate (new OTP) |
 | `zatca:devices [--status=]` | List devices with status and certificate expiry |
+| `zatca:devices:import {file}` | Register (and with an `otp` column, onboard) devices from CSV/XLSX. Options: `--disk`, `--ids=auto\|external\|package`, `--validate`, `--no-onboard`, `--actor` |
 
 ## Invoices
 

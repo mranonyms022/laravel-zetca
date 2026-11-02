@@ -75,6 +75,19 @@ php artisan zatca:device:onboard 1      # sandbox OTP: 123345
 php artisan zatca:devices
 ```
 
+Or from your code — for example when an admin uploads an Excel file of terminals:
+
+```php
+Zatca::companies()->create(['external_ref' => $company->id, 'name' => …, 'legal_name' => …,
+    'vat_number' => …, 'address' => […], 'stores' => [['code' => 'HQ', 'name' => 'Head Office', 'external_ref' => $store->id]]]);
+
+$report = Zatca::devices()->import($request->file('devices')->getRealPath());   // CSV, or XLSX with openspout
+// later, with the OTPs from the Fatoora portal:
+Zatca::devices()->onboardMany([['device' => 'POS-01', 'otp' => $otp]]);
+```
+
+See the user guide page "Devices from code and Excel" for the file columns and the report.
+
 Store the device ID where your app can find it, for example on your `terminals` table:
 
 ```php
@@ -401,7 +414,8 @@ Other hosts (Netlify, Vercel, Cloudflare Pages): build command `npm run build`, 
 
 | Milestone | Content |
 |---|---|
+| M6.1 | Done: discounts, stored lines, source link, cancellation, device import |
 | M7 | Web dashboard: invoice lists and filters, error groups, device management, retry/correct/notes actions, roles |
 | M8 | Release: benchmarks, PostgreSQL/MySQL/SQL Server CI runs, simulation verification, 1.0 |
 
-Until 1.0, pin a minor version (`^0.5`) and read the changelog before upgrading.
+Until 1.0, pin a minor version (`^0.6`) and read the changelog before upgrading.

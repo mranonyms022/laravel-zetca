@@ -261,7 +261,7 @@ final class SubmissionRunner
                     $this->storeWarnings($locked, $issuance, $result);
                     $locked->zatca_response_status = $result->reportingStatus ?? $result->clearanceStatus;
                     $locked->next_retry_at = null;
-                    $events[] = new InvoiceAccepted((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, $raw, $warnings);
+                    $events[] = new InvoiceAccepted((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, $raw, $warnings, sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id);
                     break;
 
                 case AttemptOutcome::Rejected:
@@ -281,7 +281,7 @@ final class SubmissionRunner
                     $this->storeWarnings($locked, $issuance, $result);
                     $locked->zatca_response_status = $result->reportingStatus ?? $result->clearanceStatus ?? $result->validationStatus;
                     $locked->next_retry_at = null;
-                    $events[] = new InvoiceRejected((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, $raw);
+                    $events[] = new InvoiceRejected((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, $raw, sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id);
                     break;
 
                 case AttemptOutcome::ClearanceDeactivated:
@@ -308,7 +308,7 @@ final class SubmissionRunner
                     if ($report) {
                         $this->outbox->record('submission', (int) $submission->id, OutboxRecorder::EVENT_SUBMIT, QueueNames::submission($workflow), "submit:{$issuance->uuid}:report", ['workflow' => $workflow->value], tenantId: (string) $locked->tenant_id);
                     }
-                    $events[] = new \CodingTriplets\Zatca\Core\Events\ClearanceDeactivated((int) $locked->id, (string) $locked->public_id, (int) $issuance->id);
+                    $events[] = new \CodingTriplets\Zatca\Core\Events\ClearanceDeactivated((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id);
                     break;
 
                 case AttemptOutcome::Transient:
@@ -321,7 +321,7 @@ final class SubmissionRunner
                         $this->logger->transition($locked, ['processing_status' => ProcessingStatus::Failed, 'submission_status' => SubmissionStatus::FailedPermanent], 'attempts_exhausted', $message, (int) $issuance->id);
                         $this->errors->record(ErrorCategory::ApiConnection, Severity::Critical, 'attempts_exhausted', "Submission failed after {$attempt->attempt_number} attempts: {$message}", 'submission', $context);
                         $locked->next_retry_at = null;
-                        $events[] = new InvoiceSubmissionFailed((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, 'attempts_exhausted');
+                        $events[] = new InvoiceSubmissionFailed((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, 'attempts_exhausted', sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id);
                         break;
                     }
                     $unknown = $outcome === AttemptOutcome::Unknown;
@@ -350,7 +350,7 @@ final class SubmissionRunner
                         $context + ['device_id' => (int) $device->id],
                     );
                     $locked->next_retry_at = null;
-                    $events[] = new InvoiceSubmissionFailed((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, $auth ? 'authentication' : 'request_refused');
+                    $events[] = new InvoiceSubmissionFailed((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, $auth ? 'authentication' : 'request_refused', sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id);
                     break;
             }
 

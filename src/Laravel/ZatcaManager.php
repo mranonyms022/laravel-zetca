@@ -44,6 +44,18 @@ final class ZatcaManager
         return app(\CodingTriplets\Zatca\Laravel\Invoices\InvoiceOperations::class);
     }
 
+    /** Companies (taxpayers) and stores (branches) from code. */
+    public function companies(): \CodingTriplets\Zatca\Laravel\Devices\CompanyService
+    {
+        return app(\CodingTriplets\Zatca\Laravel\Devices\CompanyService::class);
+    }
+
+    /** Devices: register, import from CSV/Excel, onboard (one or many). */
+    public function devices(): \CodingTriplets\Zatca\Laravel\Devices\DeviceService
+    {
+        return app(\CodingTriplets\Zatca\Laravel\Devices\DeviceService::class);
+    }
+
     /** Registers the console authorization callback (Horizon-style). */
     public function auth(\Closure $callback): self
     {

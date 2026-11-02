@@ -26,6 +26,8 @@ Each invoice has five independent status fields, so "what went wrong where" is a
 | `OUTCOME_UNKNOWN` | No readable answer (e.g. timeout after sending). The same document will be resent | Nothing |
 | `FAILED` | Retries exhausted, or signing failed (certificate problem) | Fix the cause, then [retry](./corrections#a-retry-the-submission) |
 | `MANUAL_REVIEW` | Stopped for a human: authentication refused, request refused, or a correction waiting for approval | Investigate; retry or approve |
+| `CANCELLED` | [Discarded](./cancellation#discard-an-invoice-that-was-never-signed) before signing | Final |
+| `ABANDONED` | Rejected and [abandoned](./cancellation#abandon-a-rejected-invoice) ⚠ | Final |
 
 ## Typical paths
 

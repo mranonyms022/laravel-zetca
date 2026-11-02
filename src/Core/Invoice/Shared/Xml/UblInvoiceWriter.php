@@ -113,7 +113,13 @@ final class UblInvoiceWriter
                 $this->el(2, 'cbc:AllowanceChargeReasonCode', $ac->reasonCode);
             }
             $this->el(2, 'cbc:AllowanceChargeReason', $ac->reason);
+            if ($ac->percent !== null) {
+                $this->el(2, 'cbc:MultiplierFactorNumeric', $ac->percent->format(2));
+            }
             $this->money(2, 'cbc:Amount', $ac->amount, $cur);
+            if ($ac->percent !== null && $ac->baseAmount !== null) {
+                $this->money(2, 'cbc:BaseAmount', $ac->baseAmount, $cur);
+            }
             $this->taxCategory(2, 'cac:TaxCategory', $ac->vat, withReason: false);
             $this->close(1, 'cac:AllowanceCharge');
         }
@@ -152,6 +158,23 @@ final class UblInvoiceWriter
             $this->el(2, 'cbc:ID', $line->id);
             $this->el(2, 'cbc:InvoicedQuantity', $line->quantity->format(6), ['unitCode' => $line->unitCode]);
             $this->money(2, 'cbc:LineExtensionAmount', $net, $cur);
+            foreach ($line->allowances as $allowance) {
+                // BG-27 line allowance; UBL order: ChargeIndicator, ReasonCode, Reason, MultiplierFactorNumeric, Amount, BaseAmount.
+                $this->open(2, 'cac:AllowanceCharge');
+                $this->el(3, 'cbc:ChargeIndicator', 'false');
+                if ($allowance->reasonCode !== null) {
+                    $this->el(3, 'cbc:AllowanceChargeReasonCode', $allowance->reasonCode);
+                }
+                $this->el(3, 'cbc:AllowanceChargeReason', $allowance->reason);
+                if ($allowance->percent !== null) {
+                    $this->el(3, 'cbc:MultiplierFactorNumeric', $allowance->percent->format(2));
+                }
+                $this->money(3, 'cbc:Amount', $allowance->amount->round(2), $cur);
+                if ($allowance->percent !== null && $allowance->baseAmount !== null) {
+                    $this->money(3, 'cbc:BaseAmount', $allowance->baseAmount, $cur);
+                }
+                $this->close(2, 'cac:AllowanceCharge');
+            }
             $this->open(2, 'cac:TaxTotal');
             $this->money(3, 'cbc:TaxAmount', $vat, $cur);
             $this->money(3, 'cbc:RoundingAmount', $net->plus($vat), $cur);

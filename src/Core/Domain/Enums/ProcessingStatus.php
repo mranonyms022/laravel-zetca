@@ -29,6 +29,10 @@ enum ProcessingStatus: string
     case RetryPending = 'RETRY_PENDING';
     case ManualReview = 'MANUAL_REVIEW';
     case Completed = 'COMPLETED';
+    /** Never signed and withdrawn by an operator (discard): no ICV used, nothing sent to ZATCA. */
+    case Cancelled = 'CANCELLED';
+    /** Rejected by ZATCA and no longer needed (abandon); the rejected document stays in the chain. */
+    case Abandoned = 'ABANDONED';
 
     /** ZATCA accepted the current issuance: never resend, never correct (use credit/debit notes). */
     public function isAccepted(): bool
@@ -38,7 +42,7 @@ enum ProcessingStatus: string
 
     public function isTerminal(): bool
     {
-        return $this === self::Completed;
+        return in_array($this, [self::Completed, self::Cancelled, self::Abandoned], true);
     }
 
     /** States from which a byte-identical resend (Operation A) may be claimed. */

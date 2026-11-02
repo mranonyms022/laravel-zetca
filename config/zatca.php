@@ -31,6 +31,8 @@ return [
         'foreign_keys' => env('ZATCA_DB_FOREIGN_KEYS', true),
         // Maximum accepted invoice JSON payload size in bytes.
         'max_payload_bytes' => 1024 * 1024,
+        // Store calculated lines + VAT breakdown per issuance (zatca_invoice_lines / zatca_invoice_vat_breakdown).
+        'store_lines' => env('ZATCA_STORE_LINES', true),
     ],
 
     'tenancy' => [

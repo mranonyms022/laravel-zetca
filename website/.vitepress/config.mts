@@ -33,6 +33,7 @@ export default defineConfig({
           text: 'Setup',
           items: [
             { text: 'Taxpayers and devices', link: '/guide/devices' },
+            { text: 'Devices from code and Excel', link: '/guide/device-import' },
             { text: 'Queues, workers and scheduler', link: '/guide/workers' },
           ],
         },
@@ -45,12 +46,14 @@ export default defineConfig({
             { text: 'Statuses and lifecycle', link: '/guide/statuses' },
             { text: 'Rejections, retries and corrections', link: '/guide/corrections' },
             { text: 'Credit and debit notes', link: '/guide/notes' },
+            { text: 'Cancelling invoices', link: '/guide/cancellation' },
           ],
         },
         {
           text: 'Integration',
           items: [
             { text: 'HTTP API', link: '/guide/http-api' },
+            { text: 'Your own invoice tables', link: '/guide/host-models' },
             { text: 'Events and notifications', link: '/guide/events' },
             { text: 'Multi-company and multi-tenant', link: '/guide/tenancy' },
           ],

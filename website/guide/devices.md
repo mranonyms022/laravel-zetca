@@ -3,6 +3,11 @@
 Every invoicing unit (POS terminal, ERP instance, web shop) is a **device** with its own key,
 certificates, counter and hash chain. A device must be onboarded with ZATCA before it can issue invoices.
 
+::: tip From your code or an Excel file
+This page uses the Artisan commands. To register companies, stores and many devices from your
+application (e.g. an uploaded Excel file), see [Devices from code and Excel](./device-import).
+:::
+
 ## 1. Register the taxpayer
 
 ```bash

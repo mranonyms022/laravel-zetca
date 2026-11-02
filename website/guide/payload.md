@@ -79,7 +79,9 @@ warning; the package rejects it before signing by default (`zatca.b2b.require_bu
 | `quantity` | Yes | Positive decimal |
 | `unit_price` | Yes | Net unit price, excluding VAT |
 | `unit_code` | No | UN/ECE rec 20 unit, default `PCE` (piece). Examples: `HUR` hour, `KGM` kilogram |
-| `discount` | No | Line discount amount (total for the line, not per unit) |
+| `item_code` / `sku` | No | Your item code (stored in the lines table; not sent to ZATCA) |
+| `discount` | No | Discount **per unit** (price discount, BT-147). Net unit price = `unit_price` − `discount` |
+| `discounts` | No | Line discounts as **totals for the line** (one or more): see [Discounts](#discounts) |
 | `vat_category` | Yes | `S` standard, `Z` zero-rated, `E` exempt, `O` out of scope |
 | `vat_rate` | Yes | Percentage: `15` (not `0.15`). `0` for Z, E and O |
 | `exemption_reason_code` | Z, E, O | `VATEX-…` code (see below) |
@@ -102,23 +104,67 @@ If `vat_category` is missing and `vat_rate` is `15`, `S` is assumed and a warnin
 (`zatca.b2c.infer_standard_vat_category`). A missing category with rate `0` is always an error, because
 0 % can mean zero-rated, exempt or out of scope.
 
-## Document allowances and charges
+## Discounts
+
+There are three kinds. All of them can be combined on one invoice.
+
+| Kind | Where | Meaning | XML |
+|---|---|---|---|
+| Unit discount | `lines[].discount` | Amount off **each unit** | `cac:Price/cac:AllowanceCharge` (BT-147) |
+| Line discount | `lines[].discounts[]` | Amount or % off **the line total** | `cac:InvoiceLine/cac:AllowanceCharge` (BG-27) |
+| Header discount | `allowances[]` | Amount or % off **the whole invoice** (per VAT group) | `cac:AllowanceCharge` (BG-20) |
+
+### Line discounts
+
+```php
+'lines' => [[
+    'name' => 'Shirt', 'quantity' => '3', 'unit_price' => '100.00', 'vat_category' => 'S', 'vat_rate' => '15',
+    'discounts' => [
+        ['amount' => '20.00', 'reason' => 'Promotion'],
+        ['percent' => '10', 'reason' => 'Member discount', 'reason_code' => '95'],
+    ],
+]],
+```
+
+Each entry has `amount` **or** `percent` (0–100, up to 2 decimals), and a `reason` and/or `reason_code`
+(UNTDID 5189, e.g. `95` discount). A percentage is calculated from the line amount
+(quantity × net unit price) unless you send `base_amount`. If you send both `percent` and `amount`, the
+amount must equal base × percent (rule BR-KSA-EN16931-03). The discounts of a line may not exceed the line
+amount.
+
+The `discounts` shape is the one used by the `zatca-xml-js` library, so payloads built for it can be sent
+as they are. Unlike that library, the package writes them as line allowances (what the ZATCA standard
+defines for line-total discounts) and rounds half-up instead of truncating.
+
+### Header (document) discounts and charges
 
 ```php
 'allowances' => [
     ['amount' => '5.00', 'reason' => 'Loyalty discount', 'vat_category' => 'S', 'vat_rate' => '15'],
+    ['percent' => '2.5', 'reason' => 'Early payment', 'vat_category' => 'S', 'vat_rate' => '15'],
 ],
 'charges' => [
     ['amount' => '10.00', 'reason' => 'Delivery', 'reason_code' => 'FC', 'vat_category' => 'S', 'vat_rate' => '15'],
 ],
 ```
 
-Each needs `amount`, a `reason` or `reason_code`, and the VAT category and rate it applies to.
+Each needs `amount` or `percent`, a `reason` or `reason_code`, and the VAT category and rate it applies to.
+A `percent` without `base_amount` is calculated from the net total of the lines in that VAT group.
+
+**Mixed VAT rates.** ZATCA needs each document allowance to belong to one VAT group. If your discount is
+for the whole basket, send `'distribute' => true` instead of `vat_category`/`vat_rate`: the package splits
+it over the VAT groups in proportion to their net amounts (an amount is split pro rata with the last
+halala on the last group; a percentage is applied to each group). This produces one allowance per group.
+
+```php
+'allowances' => [['amount' => '33.33', 'reason' => 'Voucher', 'distribute' => true]],
+```
 
 ## How totals are calculated
 
 - All arithmetic is exact decimal arithmetic (no floating point), rounded half-up to 2 decimals.
-- Line net = quantity × unit price − line discount.
+- Line amount = quantity × (unit price − unit discount), rounded; line net = line amount − line discounts.
+- Invoice net = sum of line nets − header allowances + header charges.
 - VAT is calculated per VAT group (category + rate + exemption code) on the group total, and a VAT
   breakdown is always written.
 - The totals you see in the response and in the database (`total_excl_vat`, `vat_total`,

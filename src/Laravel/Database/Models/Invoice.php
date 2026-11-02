@@ -41,7 +41,54 @@ class Invoice extends ZatcaModel
         'vat_total' => 'decimal:2',
         'total_incl_vat' => 'decimal:2',
         'requires_approval' => 'boolean',
+        'credited_amount' => 'decimal:2',
+        'debited_amount' => 'decimal:2',
+        'closed_at' => 'datetime',
     ];
+
+    /** The host application's record this invoice was issued for (`'source' => $model` option). */
+    public function source(): \Illuminate\Database\Eloquent\Relations\MorphTo
+    {
+        return $this->morphTo('source', 'source_type', 'source_id');
+    }
+
+    /** Invoices issued for a host model (any table). */
+    public function scopeForSource(\Illuminate\Database\Eloquent\Builder $query, \Illuminate\Database\Eloquent\Model $source): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->where('source_type', $source->getMorphClass())->where('source_id', (string) $source->getKey());
+    }
+
+    /** Lines of the current issuance (calculated, as signed). */
+    public function lines(): HasMany
+    {
+        return $this->hasMany(InvoiceLine::class, 'invoice_id')
+            ->where('issuance_id', $this->current_issuance_id)->orderBy('line_no');
+    }
+
+    public function vatBreakdown(): HasMany
+    {
+        return $this->hasMany(InvoiceVatBreakdown::class, 'invoice_id')->where('issuance_id', $this->current_issuance_id);
+    }
+
+    public function cancellationNote(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class, 'cancellation_invoice_id');
+    }
+
+    /** Remaining amount that can still be credited (total + debit notes − credit notes). */
+    public function creditableAmount(): string
+    {
+        $remaining = \CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::of((string) $this->total_incl_vat)
+            ->plus(\CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::of((string) ($this->debited_amount ?? '0')))
+            ->minus(\CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::of((string) ($this->credited_amount ?? '0')));
+
+        return $remaining->format(2);
+    }
+
+    public function isFullyCredited(): bool
+    {
+        return \CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::of($this->creditableAmount())->compare(\CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::zero()) <= 0;
+    }
 
     public function company(): BelongsTo
     {

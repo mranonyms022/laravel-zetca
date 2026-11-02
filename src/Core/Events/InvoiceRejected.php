@@ -13,6 +13,9 @@ final class InvoiceRejected
         public readonly int $issuanceId,
         public readonly string $workflow,
         public readonly string $status,
+        /** The host application's record (`source` option): morph class and key. */
+        public readonly ?string $sourceType = null,
+        public readonly ?string $sourceId = null,
     ) {
     }
 }

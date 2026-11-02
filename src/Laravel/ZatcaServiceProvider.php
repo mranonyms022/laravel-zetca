@@ -176,6 +176,7 @@ final class ZatcaServiceProvider extends ServiceProvider
                 Console\OnboardDeviceCommand::class,
                 Console\RenewDeviceCommand::class,
                 Console\DevicesCommand::class,
+                Console\ImportDevicesCommand::class,
                 Console\CheckCertificateExpiryCommand::class,
                 Console\VerifyAuditCommand::class,
                 Console\VerifyChainCommand::class,

@@ -40,6 +40,7 @@
         "psr/log": "^1.1|^2.0|^3.0"
     },
     "require-dev": {
+        "openspout/openspout": "^4.0",
         "orchestra/testbench": "^7.0|^8.0|^9.0|^10.0|^11.0",
         "phpunit/phpunit": "^9.5.10|^10.0|^11.0|^12.0"
     },
@@ -47,7 +48,8 @@
         "spatie/laravel-permission": "Role/permission storage for the zatca.* abilities (zatca:permissions:sync).",
         "laravel/horizon": "Redis queue dashboard; the package's own queue page works without it.",
         "promphp/prometheus_client_php": "Prometheus metrics adapter.",
-        "league/flysystem-aws-s3-v3": "S3-compatible artifact storage."
+        "league/flysystem-aws-s3-v3": "S3-compatible artifact storage.",
+        "openspout/openspout": "Read .xlsx / .ods files in Zatca::devices()->import() (CSV works without it)."
     },
     "autoload": {
         "psr-4": {

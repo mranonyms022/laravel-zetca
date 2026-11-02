@@ -4,6 +4,8 @@ Namespace `CodingTriplets\Zatca\Core\Events`. All properties are public and read
 the transaction commits and never contain secrets.
 
 `invoiceId` is the internal numeric ID; `publicId` is the `invoice_id` (ULID) returned to clients.
+Every invoice event also has `sourceType` and `sourceId`: the record of your own you linked with the
+`source` option (`null` when not linked). See [Your own invoice tables](/guide/host-models).
 
 ## Invoices
 
@@ -18,6 +20,7 @@ the transaction commits and never contain secrets.
 | `InvoiceReportingDeadlineAtRisk` | `invoiceId`, `publicId`, `issuanceId`, `deadlineAt`, `hoursLeft` |
 | `InvoiceReportingDeadlineBreached` | `invoiceId`, `publicId`, `issuanceId`, `deadlineAt` |
 | `ClearanceDeactivated` | `invoiceId`, `publicId`, `issuanceId` |
+| `InvoiceCancelled` | `invoiceId`, `publicId`, `kind` (`credit_note`, `discarded`, `abandoned`), `reason`, `cancellationPublicId`, `actorId` |
 
 ## Devices and certificates
 

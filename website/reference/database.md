@@ -12,9 +12,9 @@ locked transactions.
 
 | Table | Content |
 |---|---|
-| `companies` | Your companies (tenants of the package) |
+| `companies` | Your companies (tenants of the package); `external_ref` = your own ID |
 | `vat_registrations` | VAT number, legal name, seller IDs, address |
-| `branches` | Branches of a VAT registration |
+| `branches` | Stores / branches of a company; `external_ref` = your own ID |
 | `devices` | Devices (EGS units), environment, lifecycle status |
 | `device_keys` | Encrypted private keys (history kept) |
 | `certificates` | Compliance and production certificates, validity |
@@ -25,7 +25,9 @@ locked transactions.
 
 | Table | Content |
 |---|---|
-| `invoices` | Invoice records and current statuses |
+| `invoices` | Invoice records and current statuses; `source_type`/`source_id` link to your record; `credited_amount`, `debited_amount`, `cancellation_invoice_id`, `closed_at` |
+| `invoice_lines` | Calculated lines per signed document (append-only) |
+| `invoice_vat_breakdown` | VAT per category/rate per signed document (append-only) |
 | `invoice_versions` | Original JSON and corrections (append-only) |
 | `invoice_issuances` | Legal documents: UUID, ICV, PIH, hash, QR, status |
 | `invoice_counters` | Per device: last ICV and last hash (the chain head) |

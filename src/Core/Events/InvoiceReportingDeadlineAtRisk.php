@@ -13,6 +13,9 @@ final class InvoiceReportingDeadlineAtRisk
         public readonly int $issuanceId,
         public readonly string $deadlineAt,
         public readonly int $hoursLeft,
+        /** The host application's record (`source` option): morph class and key. */
+        public readonly ?string $sourceType = null,
+        public readonly ?string $sourceId = null,
     ) {
     }
 }

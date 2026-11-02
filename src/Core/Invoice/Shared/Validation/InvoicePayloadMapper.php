@@ -11,6 +11,7 @@ use CodingTriplets\Zatca\Core\Invoice\Shared\DTOs\Address;
 use CodingTriplets\Zatca\Core\Invoice\Shared\DTOs\AllowanceCharge;
 use CodingTriplets\Zatca\Core\Invoice\Shared\DTOs\InvoiceDocument;
 use CodingTriplets\Zatca\Core\Invoice\Shared\DTOs\InvoiceLine;
+use CodingTriplets\Zatca\Core\Invoice\Shared\DTOs\LineAllowance;
 use CodingTriplets\Zatca\Core\Invoice\Shared\DTOs\Party;
 use CodingTriplets\Zatca\Core\Invoice\Shared\DTOs\VatCategory;
 
@@ -25,9 +26,10 @@ use CodingTriplets\Zatca\Core\Invoice\Shared\DTOs\VatCategory;
  *   payment_means_code, billing_reference (string|list), reason, notes[], prepaid_amount,
  *   seller {name, vat_number, id_scheme, id_value, address{...}},
  *   buyer {name, vat_number, identification{scheme, value}, address{...}},
- *   lines [{name, quantity, unit_price, unit_code, discount, vat_category, vat_rate,
- *           exemption_reason_code, exemption_reason}],
- *   allowances [{amount, reason, reason_code, vat_category, vat_rate, ...}], charges [...]
+ *   lines [{name, quantity, unit_price, unit_code, discount (per unit), discounts [{amount|percent, reason,
+ *           reason_code}] (line totals), vat_category, vat_rate, exemption_reason_code, exemption_reason}],
+ *   allowances [{amount|percent, base_amount, reason, reason_code, vat_category, vat_rate, distribute}],
+ *   charges [...]
  */
 final class InvoicePayloadMapper
 {
@@ -78,8 +80,7 @@ final class InvoicePayloadMapper
         $acs = [];
         foreach (['allowances' => false, 'charges' => true] as $key => $isCharge) {
             foreach (array_values((array) ($p[$key] ?? [])) as $i => $raw) {
-                $ac = $this->allowanceCharge(is_array($raw) ? $raw : [], "{$key}.{$i}", $isCharge, $result);
-                if ($ac !== null) {
+                foreach ($this->allowanceCharge(is_array($raw) ? $raw : [], "{$key}.{$i}", $isCharge, $lines, $result) as $ac) {
                     $acs[] = $ac;
                 }
             }
@@ -225,24 +226,177 @@ final class InvoicePayloadMapper
             return null;
         }
 
-        return new InvoiceLine((string) ($i + 1), $name, $qty, strtoupper(trim((string) ($d['unit_code'] ?? 'PCE'))) ?: 'PCE', $price, $discount, $vat);
+        $gross = $qty->times($price->minus($discount))->round(2);
+        $allowances = $this->lineAllowances($d['discounts'] ?? [], $f, $gross, $result);
+
+        return new InvoiceLine((string) ($i + 1), $name, $qty, strtoupper(trim((string) ($d['unit_code'] ?? 'PCE'))) ?: 'PCE', $price, $discount, $vat, $allowances);
     }
 
-    /** @param array<string, mixed> $d */
-    private function allowanceCharge(array $d, string $f, bool $isCharge, ValidationResult $result): ?AllowanceCharge
+    /**
+     * Line discounts (BG-27) in the zatca-xml-js shape: [{amount, reason}] or [{percent, reason}], line totals.
+     *
+     * @return list<LineAllowance>
+     */
+    private function lineAllowances(mixed $raw, string $f, Amount $gross, ValidationResult $result): array
     {
-        $amount = $this->amount($d['amount'] ?? null, "{$f}.amount", $result, $isCharge ? 'BR-36' : 'BR-31');
+        if ($raw === null || $raw === []) {
+            return [];
+        }
+        if (! is_array($raw) || ! array_is_list($raw)) {
+            $result->error("{$f}.discounts", 'FORMAT', 'discounts must be a list of {amount|percent, reason}.');
+
+            return [];
+        }
+
+        $out = [];
+        $total = Amount::zero();
+        foreach ($raw as $j => $d) {
+            $path = "{$f}.discounts.{$j}";
+            $d = is_array($d) ? $d : [];
+            [$amount, $percent, $base] = $this->amountOrPercent($d, $path, $gross, $result, 'BR-41');
+            $reason = trim((string) ($d['reason'] ?? ''));
+            $code = isset($d['reason_code']) && trim((string) $d['reason_code']) !== '' ? trim((string) $d['reason_code']) : null;
+            if ($reason === '' && $code === null) {
+                $result->error("{$path}.reason", 'BR-42', 'A discount reason or reason code is required.');
+            }
+            if ($amount === null) {
+                continue;
+            }
+            $total = $total->plus($amount);
+            $out[] = new LineAllowance($amount, $reason !== '' ? $reason : (string) $code, $code, $percent, $base);
+        }
+        if ($total->compare($gross) > 0) {
+            $result->error("{$f}.discounts", 'BR-27', "Line discounts ({$total->format(2)}) exceed the line amount ({$gross->format(2)}).");
+        }
+
+        return $out;
+    }
+
+    /**
+     * Reads {amount} or {percent[, base_amount]}. A percentage needs a base: given, or $defaultBase.
+     * Amounts are limited to 2 decimals (BR-DEC-24 / BR-DEC-01); percent 0-100, 2 decimals (BR-KSA-DEC-01).
+     *
+     * @param array<string, mixed> $d
+     * @return array{0: ?Amount, 1: ?Amount, 2: ?Amount} amount, percent, base
+     */
+    private function amountOrPercent(array $d, string $path, ?Amount $defaultBase, ValidationResult $result, string $rule): array
+    {
+        $hasPercent = isset($d['percent']) && $d['percent'] !== '';
+        if (! $hasPercent) {
+            if (isset($d['base_amount']) && $d['base_amount'] !== '') {
+                $result->error("{$path}.percent", 'BR-KSA-EN16931-07', 'A base amount is only allowed together with a percentage.');
+            }
+            $amount = $this->amount($d['amount'] ?? null, "{$path}.amount", $result, $rule);
+            if ($amount !== null && $amount->isNegative()) {
+                $result->error("{$path}.amount", $rule, 'Amount must not be negative.');
+            }
+            if ($amount !== null && ! $amount->equals($amount->round(2))) {
+                $result->error("{$path}.amount", 'BR-DEC-24', 'At most 2 decimal places are allowed.');
+            }
+
+            return [$amount?->round(2), null, null];
+        }
+
+        $percent = $this->amount($d['percent'], "{$path}.percent", $result);
+        if ($percent === null) {
+            return [null, null, null];
+        }
+        if ($percent->isNegative() || $percent->compare(Amount::of('100')) > 0 || ! $percent->equals($percent->round(2))) {
+            $result->error("{$path}.percent", 'BR-KSA-DEC-01', 'Percentage must be between 0.00 and 100.00 with at most 2 decimals.');
+
+            return [null, null, null];
+        }
+        $base = isset($d['base_amount']) && $d['base_amount'] !== ''
+            ? $this->amount($d['base_amount'], "{$path}.base_amount", $result)
+            : $defaultBase;
+        if ($base === null) {
+            $result->error("{$path}.base_amount", 'BR-KSA-EN16931-04', 'A percentage needs a base amount.');
+
+            return [null, null, null];
+        }
+        $base = $base->round(2);
+        $amount = $base->times($percent)->dividedBy('100', 2);
+        if (isset($d['amount']) && $d['amount'] !== '' && Amount::isNumeric($d['amount']) && ! Amount::fromInput($d['amount'])->round(2)->equals($amount)) {
+            $result->error("{$path}.amount", 'BR-KSA-EN16931-03', "Amount must equal base x percent / 100 ({$amount->format(2)}).");
+        }
+
+        return [$amount, $percent->round(2), $base];
+    }
+
+    /**
+     * Document allowance/charge. Returns one entry, or one per VAT group when `distribute` is true
+     * (an amount or percentage without a VAT category, split across the lines' VAT groups by net amount).
+     *
+     * @param array<string, mixed> $d
+     * @param list<InvoiceLine> $lines
+     * @return list<AllowanceCharge>
+     */
+    private function allowanceCharge(array $d, string $f, bool $isCharge, array $lines, ValidationResult $result): array
+    {
+        $rule = $isCharge ? 'BR-36' : 'BR-31';
         $reason = trim((string) ($d['reason'] ?? ''));
         $code = isset($d['reason_code']) && trim((string) $d['reason_code']) !== '' ? trim((string) $d['reason_code']) : null;
         if ($reason === '' && $code === null) {
             $result->error("{$f}.reason", $isCharge ? 'BR-39' : 'BR-33', 'A reason or reason code is required.');
         }
-        if ($amount !== null && $amount->isNegative()) {
-            $result->error("{$f}.amount", $isCharge ? 'BR-36' : 'BR-31', 'Amount must not be negative.');
-        }
-        $vat = $this->vat($d, $f, $result);
+        $label = $reason !== '' ? $reason : (string) $code;
 
-        return $amount !== null && $vat !== null ? new AllowanceCharge($isCharge, $amount, $reason !== '' ? $reason : (string) $code, $code, $vat) : null;
+        // Net amount per VAT group of the lines.
+        $groups = [];
+        foreach ($lines as $line) {
+            $groups[$line->vat->key()] ??= ['category' => $line->vat, 'net' => Amount::zero()];
+            $groups[$line->vat->key()]['net'] = $groups[$line->vat->key()]['net']->plus($line->netAmount());
+        }
+
+        if (filter_var($d['distribute'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            if (isset($d['vat_category']) && trim((string) $d['vat_category']) !== '') {
+                $result->error("{$f}.distribute", 'FORMAT', 'Use either distribute or vat_category, not both.');
+
+                return [];
+            }
+            if ($groups === []) {
+                return [];
+            }
+            $totalNet = Amount::zero();
+            foreach ($groups as $g) {
+                $totalNet = $totalNet->plus($g['net']);
+            }
+            $hasPercent = isset($d['percent']) && $d['percent'] !== '';
+            [$amount, $percent] = $this->amountOrPercent($d, $f, $totalNet, $result, $rule);
+            if ($amount === null) {
+                return [];
+            }
+            if ($totalNet->isZero() || $totalNet->isNegative()) {
+                $result->error("{$f}.distribute", $rule, 'Nothing to distribute: the lines have no net amount.');
+
+                return [];
+            }
+
+            $out = [];
+            $remaining = $amount;
+            $keys = array_keys($groups);
+            foreach ($keys as $n => $key) {
+                $g = $groups[$key];
+                if ($hasPercent) {
+                    $base = $g['net']->round(2);
+                    $out[] = new AllowanceCharge($isCharge, $base->times($percent)->dividedBy('100', 2), $label, $code, $g['category'], $percent, $base);
+                    continue;
+                }
+                $share = $n === count($keys) - 1 ? $remaining : $amount->times($g['net'])->dividedBy($totalNet, 2);
+                $remaining = $remaining->minus($share);
+                if (! $share->isZero()) {
+                    $out[] = new AllowanceCharge($isCharge, $share, $label, $code, $g['category']);
+                }
+            }
+
+            return $out;
+        }
+
+        $vat = $this->vat($d, $f, $result);
+        $defaultBase = $vat !== null && isset($groups[$vat->key()]) ? $groups[$vat->key()]['net'] : null;
+        [$amount, $percent, $base] = $this->amountOrPercent($d, $f, $defaultBase, $result, $rule);
+
+        return $amount !== null && $vat !== null ? [new AllowanceCharge($isCharge, $amount, $label, $code, $vat, $percent, $base)] : [];
     }
 
     /**

@@ -83,6 +83,9 @@ invoices ───────────────────────�
   │        1─1 b2c_reporting_submissions | b2b_clearance_submissions
   │                 1─* submission_attempts
   │ 1─* errors, warnings, processing_logs
+  │ 1─* invoice_lines, invoice_vat_breakdown   per issuance, append-only (M6.1)
+  ├ source_type/source_id → host application record (polymorphic, M6.1)
+  ├ cancellation_invoice_id → invoices; credited_amount, debited_amount, closed_at (M6.1)
   └ billing_reference_invoice_id → invoices (credit/debit notes)
 outbox, error_groups, audit_logs, settings, stats_daily, bulk_operations(_items), invoice_drafts
 ```
@@ -235,12 +238,40 @@ RENEWING, RENEWAL_FAILED.
 | `correct` | No issuance (VALIDATION_FAILED/FAILED/READY/MANUAL_REVIEW) or issuance `rejected`; same document type; policy allows | Validate (throw, save nothing) → new version with `changed_fields` (JSON pointers) → `READY_FOR_PROCESSING` (or `MANUAL_REVIEW` with four-eyes) → `ChainService::issue(Correction)` |
 | `reissueUnchanged` | Issuance `rejected`; policy allows | `ChainService::issue(ReissueUnchanged)` |
 | `approve` | `requires_approval`, `MANUAL_REVIEW`; approver ≠ corrector with four-eyes | Then reprocess |
-| `creditNote` / `debitNote` | Original is type 388 and its issuance is accepted | Build payload (type, billing reference, reason, inherited buyer/supply date/subtype) → workflow issuer with `billing_reference_invoice_id` |
+| `creditNote` / `debitNote` | Original is type 388 and its issuance is accepted | Under advisory lock `zatca:notes:{id}`: credit notes are mapped and checked against `creditableAmount()` (total + debited − credited) → workflow issuer with `billing_reference_invoice_id` and the original's `source` → `refreshAdjustments()` (sums notes excluding VALIDATION_FAILED/CANCELLED/ABANDONED) |
+| `cancel` | Accepted, not cancelled, `credited_amount = 0` | Credit note built from the original's current version (lines, allowances, charges) → `cancellation_invoice_id`, `InvoiceCancelled(credit_note)` |
+| `discard` | No issuance; VALIDATION_FAILED/READY/FAILED/MANUAL_REVIEW | → `CANCELLED`, `closed_at`, `InvoiceCancelled(discarded)`; queued generation finds a terminal state and does nothing |
+| `abandon` ⚠ | Current issuance `rejected`; REJECTED/MANUAL_REVIEW | Errors resolved (`abandoned: reason`) → `ABANDONED`; issuance stays in the chain |
 
 **Rejection policies** (`RejectedInvoicePolicy`, built by `RejectionPolicies` from `zatca.correction.*`):
 `keepInvoiceNumber()`, `issueDate(rejectedAt, now)`, `requiresCreditNote()`. ⚠ Q-Z2/Q-Z3/Q-Z4.
 
 ---
+
+## 7a. M6.1 additions
+
+**Discounts** (`InvoicePayloadMapper`, `UblInvoiceWriter`): `lines[].discount` = per-unit price allowance
+(BT-147, `cac:Price/cac:AllowanceCharge`); `lines[].discounts[]` = `LineAllowance` DTOs (BG-27) written after
+`LineExtensionAmount` and before `TaxTotal`; line net = round(qty × net price) − Σ line allowances.
+Header `allowances[]/charges[]` accept `percent` (+ optional `base_amount`, default = net of the VAT group);
+`distribute: true` groups line nets per VAT key and returns one `AllowanceCharge` per group (amount
+pro rata, remainder on the last group). Rules enforced: BR-KSA-DEC-01, BR-KSA-EN16931-03..07, BR-DEC-24,
+BR-42, BR-27.
+
+**Stored lines** (`ChainService::storeLines()`, inside T2 after the version update): bulk insert (chunks of
+500) of calculated lines and VAT subtotals keyed by `issuance_id`; `Invoice::lines()` filters by
+`current_issuance_id`. Off with `database.store_lines = false`.
+
+**Source link**: `InvoiceIntakeService::source()` accepts a saved model (`getMorphClass()`, key) or
+`['type','id']`; index `inv_source(source_type, source_id)`. Events: trailing `?sourceType, ?sourceId`.
+
+**Companies / devices** (`Laravel\Devices\CompanyService`, `DeviceService`, `Import\SpreadsheetReader`,
+`Import\DeviceImportReport`): lookups by `external_ref` (non-unique index; uniqueness by code because SQL
+Server treats NULLs as equal in unique indexes), store code or package ID per `ids` mode. Device
+idempotency key: VAT registration + branch + name + environment. The reader streams rows (CSV: BOM strip,
+delimiter detection; XLSX/ODS: openspout, first sheet); disk sources are copied to a 0600 temp file that is
+always deleted. OTPs are `#[\SensitiveParameter]`, held in a local variable for one row, never persisted;
+onboarding is synchronous for that reason.
 
 ## 8. Monitors
 

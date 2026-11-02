@@ -55,6 +55,8 @@ final class InvoiceOperations
         private readonly ProcessingLogger $logger,
         private readonly OutboxRecorder $outbox,
         private readonly SubmissionRunner $runner,
+        private readonly \CodingTriplets\Zatca\Core\Contracts\Locks\AdvisoryLock $locks,
+        private readonly \CodingTriplets\Zatca\Core\Contracts\Events\EventDispatcher $events,
     ) {
     }
 
@@ -207,7 +209,12 @@ final class InvoiceOperations
             $locked->save();
         });
 
-        return $fourEyes ? IssueResult::fromInvoice($invoice, false) : $this->reprocess($invoice, $actorId);
+        $result = $fourEyes ? IssueResult::fromInvoice($invoice, false) : $this->reprocess($invoice, $actorId);
+        if ($invoice->billing_reference_invoice_id !== null && ($original = Invoice::query()->withoutGlobalScopes()->find($invoice->billing_reference_invoice_id)) !== null) {
+            $this->refreshAdjustments($original);   // a corrected note may have a different total
+        }
+
+        return $result;
     }
 
     /** New issuance from the unchanged JSON, for a rejection caused by the package or a certificate. */
@@ -308,13 +315,200 @@ final class InvoiceOperations
         }
 
         $issuer = app($original->workflow === Workflow::B2B ? 'zatca.b2b' : 'zatca.b2c');
+        $device = $options['device'] ?? (int) $original->device_id;
 
-        return $issuer->issue($payload, [
-            'device' => $options['device'] ?? (int) $original->device_id,
-            'external_id' => $options['external_id'] ?? null,
-            'actor_id' => $actorId,
-            'billing_reference_invoice_id' => (int) $original->id,
+        // Serialise notes per original so two concurrent credit notes cannot both pass the over-credit check.
+        return $this->locks->withLock("zatca:notes:{$original->id}", 30, 10, function () use ($type, $original, $payload, $issuer, $device, $options, $actorId): IssueResult {
+            if ($type === 'credit_note') {
+                $this->assertCreditable($original, $payload, $device);
+            }
+            $result = $issuer->issue($payload, array_filter([
+                'device' => $device,
+                'external_id' => $options['external_id'] ?? null,
+                'actor_id' => $actorId,
+                'billing_reference_invoice_id' => (int) $original->id,
+                // a note belongs to the same host record as its original unless told otherwise
+                'source' => $options['source'] ?? ($original->source_type !== null ? ['type' => $original->source_type, 'id' => (string) $original->source_id] : null),
+            ], static fn ($v) => $v !== null));
+            $this->refreshAdjustments($original);
+
+            return $result;
+        });
+    }
+
+    // ------------------------------------------------------------------ D. Cancellation
+
+    /**
+     * Cancel an accepted invoice completely: a credit note (381) with all lines, allowances and charges of
+     * the original, in the same workflow. ZATCA has no separate cancellation document.
+     *
+     * @param array{invoice_number?: string, device?: int|string, external_id?: string, source?: mixed} $options
+     *        invoice_number defaults to "{original number}-CN"
+     */
+    public function cancel(Invoice|string $original, string $reason, ?int $actorId = null, array $options = []): IssueResult
+    {
+        $original = $this->find($original);
+        if ($original->cancellation_invoice_id !== null) {
+            throw OperationNotAllowed::because($original, 'it is already cancelled');
+        }
+        $this->refreshAdjustments($original);
+        if (! \CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::of((string) $original->credited_amount)->isZero()) {
+            throw OperationNotAllowed::because($original, 'it already has credit notes; credit the remaining ' . $original->creditableAmount() . ' SAR with creditNote()');
+        }
+
+        $base = (array) InvoiceVersion::query()->whereKey($original->current_version_id)->value('payload');
+        $payload = array_filter([
+            'invoice_number' => $options['invoice_number'] ?? ($original->invoice_number . '-CN'),
+            'lines' => $base['lines'] ?? [],
+            'allowances' => $base['allowances'] ?? null,
+            'charges' => $base['charges'] ?? null,
+            'payment_means_code' => $base['payment_means_code'] ?? null,
+        ], static fn ($v) => $v !== null);
+
+        $result = $this->creditNote($original, $payload, $reason, $actorId, $options);
+        if ($result->invoice !== null && $result->success) {
+            $this->transactions->run(function () use ($original, $result, $reason, $actorId): void {
+                $locked = Invoice::query()->withoutGlobalScopes()->lockForUpdate()->findOrFail($original->id);
+                $locked->cancellation_invoice_id = $result->invoice->id;
+                $this->logger->log($locked, 'operation', 'cancelled', null, null, "Cancelled by credit note {$result->invoice->public_id}: {$reason}", [], null, $actorId);
+                $locked->save();
+                $this->events->dispatchAfterCommit(new \CodingTriplets\Zatca\Core\Events\InvoiceCancelled(
+                    (int) $locked->id, (string) $locked->public_id, 'credit_note', $reason, (string) $result->invoice->public_id, $actorId,
+                    sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id,
+                ));
+            });
+        }
+
+        return $result;
+    }
+
+    /** Withdraw an invoice that was never signed (no ICV used, nothing sent to ZATCA). */
+    public function discard(Invoice|string $invoice, string $reason, ?int $actorId = null): Invoice
+    {
+        $invoice = $this->find($invoice);
+        $this->requireReason($reason);
+        $allowed = [ProcessingStatus::ValidationFailed, ProcessingStatus::ReadyForProcessing, ProcessingStatus::Failed, ProcessingStatus::ManualReview];
+
+        $this->transactions->run(function () use ($invoice, $reason, $actorId, $allowed): void {
+            $locked = Invoice::query()->withoutGlobalScopes()->lockForUpdate()->findOrFail($invoice->id);
+            if ($locked->current_issuance_id !== null) {
+                throw OperationNotAllowed::because($locked, 'it has a signed document; use cancel() (accepted) or abandon() (rejected)');
+            }
+            if (! in_array($locked->processing_status, $allowed, true)) {
+                throw OperationNotAllowed::because($locked, "it is {$locked->processing_status->value}");
+            }
+            $this->close($locked, ProcessingStatus::Cancelled, 'discarded', $reason, $actorId);
+        });
+
+        return $this->afterClose($invoice);
+    }
+
+    /**
+     * Close an invoice whose document ZATCA rejected and that is no longer needed. The rejected document
+     * stays in the chain and in the history. ⚠ ZATCA guidance on abandoning rejected documents is not explicit.
+     */
+    public function abandon(Invoice|string $invoice, string $reason, ?int $actorId = null): Invoice
+    {
+        $invoice = $this->find($invoice);
+        $this->requireReason($reason);
+
+        $this->transactions->run(function () use ($invoice, $reason, $actorId): void {
+            $locked = Invoice::query()->withoutGlobalScopes()->lockForUpdate()->findOrFail($invoice->id);
+            $issuance = $this->currentIssuance($locked);
+            if ($issuance === null || $issuance->status !== IssuanceStatus::Rejected) {
+                throw OperationNotAllowed::because($locked, 'only an invoice whose document ZATCA rejected can be abandoned');
+            }
+            if (! in_array($locked->processing_status, [ProcessingStatus::Rejected, ProcessingStatus::ManualReview], true)) {
+                throw OperationNotAllowed::because($locked, "it is {$locked->processing_status->value}");
+            }
+            ZatcaError::query()->where('invoice_id', $locked->id)->where('is_resolved', false)->update([
+                'is_resolved' => true, 'resolved_at' => now(), 'resolved_by' => $actorId, 'resolution_note' => 'abandoned: ' . mb_substr($reason, 0, 200),
+            ]);
+            $locked->unresolved_error_count = 0;
+            $this->close($locked, ProcessingStatus::Abandoned, 'abandoned', $reason, $actorId);
+        });
+
+        return $this->afterClose($invoice);
+    }
+
+    private function close(Invoice $locked, ProcessingStatus $status, string $kind, string $reason, ?int $actorId): void
+    {
+        $this->logger->transition($locked, ['processing_status' => $status], $kind, $reason, $locked->current_issuance_id, $actorId);
+        $locked->closed_at = now();
+        $locked->requires_approval = false;
+        $locked->next_retry_at = null;
+        $locked->save();
+        $this->events->dispatchAfterCommit(new \CodingTriplets\Zatca\Core\Events\InvoiceCancelled(
+            (int) $locked->id, (string) $locked->public_id, $kind, $reason, null, $actorId,
+                    sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id,
+                ));
+    }
+
+    private function afterClose(Invoice $invoice): Invoice
+    {
+        $invoice->refresh();
+        if ($invoice->billing_reference_invoice_id !== null) {
+            $original = Invoice::query()->withoutGlobalScopes()->find($invoice->billing_reference_invoice_id);
+            if ($original !== null) {
+                $this->refreshAdjustments($original);
+            }
+        }
+
+        return $invoice;
+    }
+
+    private function requireReason(string $reason): void
+    {
+        if (trim($reason) === '') {
+            throw new \InvalidArgumentException('A reason is required.');
+        }
+    }
+
+    /**
+     * Refuses a credit note that would take the credited total above the invoice total (+ debit notes).
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function assertCreditable(Invoice $original, array $payload, int|string $device): void
+    {
+        $deviceModel = is_int($device) || ctype_digit((string) $device)
+            ? Device::query()->withoutGlobalScopes()->find((int) $device)
+            : Device::query()->withoutGlobalScopes()->where('device_uuid', (string) $device)->first();
+        if ($deviceModel === null) {
+            return;   // the issuer reports the missing device
+        }
+        $prepared = $this->preparer->prepare($payload, $original->workflow, $deviceModel, (string) ($payload['invoice_number'] ?? ''));
+        $document = (new InvoicePayloadMapper())->map($prepared, new ValidationResult(), $original->workflow);
+        if ($document === null) {
+            return;   // invalid: the issuer returns the validation errors
+        }
+        $noteTotal = InvoiceTotals::calculate($document)->taxInclusive;
+        $this->refreshAdjustments($original);
+        $remaining = \CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::of($original->creditableAmount());
+        if ($noteTotal->compare($remaining) > 0) {
+            throw OperationNotAllowed::because($original, "the credit note ({$noteTotal->format(2)} SAR) exceeds the amount that can still be credited ({$remaining->format(2)} SAR)");
+        }
+    }
+
+    /**
+     * Recomputes credited_amount / debited_amount of an original invoice from its notes. Notes count unless
+     * they failed validation, were discarded or abandoned (rejected notes still count until abandoned or corrected).
+     */
+    public function refreshAdjustments(Invoice $original): void
+    {
+        $excluded = [ProcessingStatus::ValidationFailed->value, ProcessingStatus::Cancelled->value, ProcessingStatus::Abandoned->value];
+        $sums = Invoice::query()->withoutGlobalScopes()
+            ->where('billing_reference_invoice_id', $original->id)
+            ->whereNotIn('processing_status', $excluded)
+            ->selectRaw('document_type, SUM(total_incl_vat) AS total')
+            ->groupBy('document_type')
+            ->pluck('total', 'document_type');
+
+        Invoice::query()->withoutGlobalScopes()->whereKey($original->id)->update([
+            'credited_amount' => \CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::of((string) ($sums[DocumentType::CreditNote->value] ?? '0'))->format(2),
+            'debited_amount' => \CodingTriplets\Zatca\Core\Invoice\Shared\Calculation\Amount::of((string) ($sums[DocumentType::DebitNote->value] ?? '0'))->format(2),
         ]);
+        $original->refresh();
     }
 
     // ------------------------------------------------------------------ internals

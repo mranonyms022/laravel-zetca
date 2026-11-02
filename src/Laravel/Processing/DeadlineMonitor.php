@@ -82,7 +82,7 @@ final class DeadlineMonitor
         }
 
         $this->logger->log($invoice, 'reporting', $event, null, null, "Not reported yet; deadline in less than {$hours} h", ['deadline_at' => $deadline->format(DATE_ATOM)], $issuanceId);
-        $this->events->dispatchAfterCommit(new InvoiceReportingDeadlineAtRisk((int) $invoice->id, (string) $invoice->public_id, $issuanceId, $deadline->format(DATE_ATOM), $hours));
+        $this->events->dispatchAfterCommit(new InvoiceReportingDeadlineAtRisk((int) $invoice->id, (string) $invoice->public_id, $issuanceId, $deadline->format(DATE_ATOM), $hours, sourceType: $invoice->source_type, sourceId: $invoice->source_id === null ? null : (string) $invoice->source_id));
 
         return true;
     }
@@ -99,7 +99,7 @@ final class DeadlineMonitor
             $this->errors->record(ErrorCategory::ApiConnection, Severity::Critical, 'reporting_deadline_breached',
                 "Simplified invoice {$invoice->invoice_number} was not reported within the deadline ({$deadline}).",
                 'deadline.monitor', ['invoice' => $invoice, 'issuance_id' => (int) $submission->issuance_id]);
-            $this->events->dispatchAfterCommit(new InvoiceReportingDeadlineBreached((int) $invoice->id, (string) $invoice->public_id, (int) $submission->issuance_id, $deadline));
+            $this->events->dispatchAfterCommit(new InvoiceReportingDeadlineBreached((int) $invoice->id, (string) $invoice->public_id, (int) $submission->issuance_id, $deadline, sourceType: $invoice->source_type, sourceId: $invoice->source_id === null ? null : (string) $invoice->source_id));
         });
     }
 }

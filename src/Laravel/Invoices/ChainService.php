@@ -31,6 +31,8 @@ use CodingTriplets\Zatca\Laravel\Database\Models\Invoice;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceArtifact;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceCounter;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceIssuance;
+use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceLine;
+use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceVatBreakdown;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceVersion;
 use CodingTriplets\Zatca\Laravel\Database\Models\Warning;
 use CodingTriplets\Zatca\Laravel\Processing\Outbox\OutboxRecorder;
@@ -203,6 +205,9 @@ final class ChainService
         }
 
         InvoiceVersion::query()->whereKey($version->id)->whereNull('issuance_id')->update(['issuance_id' => $issuance->id]);
+        if (config('zatca.database.store_lines', true)) {
+            $this->storeLines($invoice, $issuance, $generated, (array) ($payload['lines'] ?? []));
+        }
 
         $submission = $this->createSubmission($invoice, $issuance, $workflow, $now);
 
@@ -252,12 +257,12 @@ final class ChainService
             (string) $invoice->tenant_id,
         );
 
-        $event = new InvoiceIssued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, $workflow->value, $icv, $generated->uuid);
+        $event = new InvoiceIssued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, $workflow->value, $icv, $generated->uuid, sourceType: $invoice->source_type, sourceId: $invoice->source_id === null ? null : (string) $invoice->source_id);
         $this->events->dispatchAfterCommit($event);
         if ($previous !== null) {
-            $this->events->dispatchAfterCommit(new InvoiceReissued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, (int) $previous->id, $workflow->value, $reason->value, $icv, $generated->uuid, $actorId));
+            $this->events->dispatchAfterCommit(new InvoiceReissued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, (int) $previous->id, $workflow->value, $reason->value, $icv, $generated->uuid, $actorId, sourceType: $invoice->source_type, sourceId: $invoice->source_id === null ? null : (string) $invoice->source_id));
             if ($workflow === Workflow::B2C) {
-                $this->events->dispatchAfterCommit(new CustomerCopyReissued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, $generated->qrCode()));
+                $this->events->dispatchAfterCommit(new CustomerCopyReissued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, $generated->qrCode(), sourceType: $invoice->source_type, sourceId: $invoice->source_id === null ? null : (string) $invoice->source_id));
             }
         }
 
@@ -265,6 +270,72 @@ final class ChainService
     }
 
     /** Errors of the superseded issuance are resolved by the reissue (they stay in history). */
+    /**
+     * Lines and VAT breakdown exactly as calculated for the signed XML (reporting / dashboard).
+     *
+     * @param list<array<string, mixed>> $rawLines the prepared payload lines (for item_code / sku)
+     */
+    private function storeLines(Invoice $invoice, InvoiceIssuance $issuance, \CodingTriplets\Zatca\Core\Invoice\Shared\Generation\GeneratedInvoice $generated, array $rawLines): void
+    {
+        $tenant = (string) $invoice->tenant_id;
+        $now = now();
+        $rows = [];
+        foreach (array_values($generated->document->lines) as $i => $line) {
+            $raw = is_array($rawLines[$i] ?? null) ? $rawLines[$i] : [];
+            $code = $raw['item_code'] ?? $raw['sku'] ?? null;
+            $net = $line->netAmount();
+            $vat = $line->vatAmount();
+            $rows[] = [
+                'tenant_id' => $tenant,
+                'invoice_id' => $invoice->id,
+                'issuance_id' => $issuance->id,
+                'line_no' => (int) $line->id,
+                'name' => mb_substr($line->name, 0, 1000),
+                'item_code' => $code !== null && $code !== '' ? mb_substr((string) $code, 0, 191) : null,
+                'quantity' => $line->quantity->format(6),
+                'unit_code' => $line->unitCode,
+                'unit_price' => $line->unitPrice->format(6),
+                'unit_discount' => $line->discount->format(6),
+                'line_discount' => $line->allowanceTotal()->format(2),
+                'net_amount' => $net->format(2),
+                'vat_category' => $line->vat->code,
+                'vat_rate' => $line->vat->rate->format(2),
+                'exemption_reason_code' => $line->vat->reasonCode,
+                'vat_amount' => $vat->format(2),
+                'amount_incl_vat' => $net->plus($vat)->format(2),
+                'discounts' => $line->allowances === [] ? null : json_encode(array_map(static fn ($a) => array_filter([
+                    'amount' => $a->amount->format(2),
+                    'reason' => $a->reason,
+                    'reason_code' => $a->reasonCode,
+                    'percent' => $a->percent?->format(2),
+                    'base_amount' => $a->baseAmount?->format(2),
+                ], static fn ($v) => $v !== null), $line->allowances), JSON_UNESCAPED_UNICODE),
+                'created_at' => $now,
+            ];
+        }
+        foreach (array_chunk($rows, 500) as $chunk) {
+            InvoiceLine::query()->insert($chunk);
+        }
+
+        $breakdown = [];
+        foreach ($generated->totals->subtotals as $sub) {
+            $breakdown[] = [
+                'tenant_id' => $tenant,
+                'invoice_id' => $invoice->id,
+                'issuance_id' => $issuance->id,
+                'vat_category' => $sub['category']->code,
+                'vat_rate' => $sub['category']->rate->format(2),
+                'exemption_reason_code' => $sub['category']->reasonCode,
+                'taxable_amount' => $sub['taxable']->format(2),
+                'vat_amount' => $sub['tax']->format(2),
+                'created_at' => $now,
+            ];
+        }
+        if ($breakdown !== []) {
+            InvoiceVatBreakdown::query()->insert($breakdown);
+        }
+    }
+
     private function resolveErrorsOf(Invoice $invoice, int $previousIssuanceId, int $newIssuanceId, ?int $actorId): void
     {
         ZatcaError::query()->withoutGlobalScopes()

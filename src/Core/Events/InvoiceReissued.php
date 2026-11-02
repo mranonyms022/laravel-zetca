@@ -17,6 +17,9 @@ final class InvoiceReissued
         public readonly int $counter,
         public readonly string $uuid,
         public readonly ?int $actorId,
+        /** The host application's record (`source` option): morph class and key. */
+        public readonly ?string $sourceType = null,
+        public readonly ?string $sourceId = null,
     ) {
     }
 }

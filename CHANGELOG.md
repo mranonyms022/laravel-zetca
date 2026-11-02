@@ -5,6 +5,39 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0-alpha.1] - not yet tagged (M6.1)
+
+### Added
+- **Discounts**:
+  - line discounts `lines[].discounts[]` (amount or percent, reason/reason code; zatca-xml-js shape) written
+    as `cac:InvoiceLine/cac:AllowanceCharge` (BG-27);
+  - percentages on header allowances/charges (`MultiplierFactorNumeric` + `BaseAmount`, BR-KSA-EN16931-03..07);
+  - `distribute: true` splits one header discount over the VAT groups.
+  - Verified live in the ZATCA sandbox (7 B2C/B2B cases accepted without warnings).
+- **Stored lines**: `invoice_lines` and `invoice_vat_breakdown` per signed document
+  (`database.store_lines`, default on); `Invoice::lines()` / `vatBreakdown()`.
+- **Link to the host app's own invoice table**: `source` issue option (model or `['type', 'id']`),
+  `source_type`/`source_id` columns, `HasZatcaInvoices` trait, `Invoice::source()` / `scopeForSource()`.
+  Notes inherit the link. Every invoice event carries `sourceType`/`sourceId`.
+- **Cancellation**:
+  - `cancel()` (full credit note built from the original);
+  - `discard()` (never-signed invoice → `CANCELLED`);
+  - `abandon()` (rejected invoice → `ABANDONED`) ⚠;
+  - new `InvoiceCancelled` event.
+  - Credit notes are checked against `creditableAmount()` (total + debit notes − credit notes) under a
+    per-invoice lock; `credited_amount`/`debited_amount` are kept on the original.
+- **Companies and devices from code**:
+  - `Zatca::companies()->create()/createStore()` (idempotent, `external_ref` = host ID);
+  - `Zatca::devices()->register()/registerMany()/import()/validateMany()/onboard()/onboardMany()/resume()`;
+  - CSV built in, XLSX/ODS with the optional `openspout/openspout`;
+  - files from a path or a filesystem disk;
+  - per-row `DeviceImportReport`. OTPs are never stored, queued, logged or reported.
+- `zatca:devices:import` command.
+- Migration `2026_11_03_000006_add_zatca_lines_source_and_cancellation`.
+
+### Fixed
+- Docs: `lines[].discount` is a per-unit discount (BT-147), not a line total.
+
 ## [0.5.0-alpha.1] - not yet tagged
 
 ### Added

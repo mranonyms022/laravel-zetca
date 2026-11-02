@@ -68,6 +68,12 @@ final class Amount
         return new self($this->value->multipliedBy($other instanceof self ? $other->value : BigDecimal::of($other)));
     }
 
+    /** Division rounded half-up to $scale decimals. */
+    public function dividedBy(self|string $other, int $scale = 2): self
+    {
+        return new self($this->value->dividedBy($other instanceof self ? $other->value : BigDecimal::of($other), $scale, self::halfUp()));
+    }
+
     /** Rounds half-up (ZATCA amounts: 2 decimals). */
     public function round(int $scale = 2): self
     {
