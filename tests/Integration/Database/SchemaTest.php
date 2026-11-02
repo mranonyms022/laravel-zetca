@@ -35,7 +35,8 @@ final class SchemaTest extends IntegrationTestCase
         $engines = \Illuminate\Support\Facades\DB::table('information_schema.tables')
             ->where('table_schema', \Illuminate\Support\Facades\DB::getDatabaseName())
             ->where('table_name', 'like', 'zatca\\_%')
-            ->distinct()->pluck('engine')->all();
+            // alias: MySQL 8 returns information_schema columns in upper case (ENGINE), MariaDB in lower case
+            ->selectRaw('DISTINCT engine AS engine_name')->pluck('engine_name')->all();
 
         self::assertSame(['InnoDB'], $engines);
     }

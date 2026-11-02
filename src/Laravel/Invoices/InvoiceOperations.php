@@ -57,7 +57,81 @@ final class InvoiceOperations
         private readonly SubmissionRunner $runner,
         private readonly \CodingTriplets\Zatca\Core\Contracts\Locks\AdvisoryLock $locks,
         private readonly \CodingTriplets\Zatca\Core\Contracts\Events\EventDispatcher $events,
+        private readonly \CodingTriplets\Zatca\Laravel\Audit\AuditLogger $audit,
     ) {
+    }
+
+    public function retry(Invoice|string $invoice, ?int $actorId = null, bool $now = false): string
+    {
+        return $this->audited('invoice.retry', $invoice, [], $actorId, fn () => $this->performRetry($invoice, $actorId, $now));
+    }
+
+    public function correct(Invoice|string $invoice, array $payload, string $reason, ?int $actorId = null): IssueResult
+    {
+        return $this->audited('invoice.correct', $invoice, ['reason' => $reason], $actorId, fn () => $this->performCorrect($invoice, $payload, $reason, $actorId));
+    }
+
+    public function reissueUnchanged(Invoice|string $invoice, string $reason, ?int $actorId = null): IssueResult
+    {
+        return $this->audited('invoice.reissue', $invoice, ['reason' => $reason], $actorId, fn () => $this->performReissueUnchanged($invoice, $reason, $actorId));
+    }
+
+    public function approve(Invoice|string $invoice, int $approverId): IssueResult
+    {
+        return $this->audited('invoice.approve', $invoice, [], $approverId, fn () => $this->performApprove($invoice, $approverId));
+    }
+
+    public function creditNote(Invoice|string $original, array $payload, string $reason, ?int $actorId = null, array $options = []): IssueResult
+    {
+        return $this->audited('invoice.credit_note', $original, ['reason' => $reason], $actorId, fn () => $this->performCreditNote($original, $payload, $reason, $actorId, $options));
+    }
+
+    public function debitNote(Invoice|string $original, array $payload, string $reason, ?int $actorId = null, array $options = []): IssueResult
+    {
+        return $this->audited('invoice.debit_note', $original, ['reason' => $reason], $actorId, fn () => $this->performDebitNote($original, $payload, $reason, $actorId, $options));
+    }
+
+    public function cancel(Invoice|string $original, string $reason, ?int $actorId = null, array $options = []): IssueResult
+    {
+        return $this->audited('invoice.cancel', $original, ['reason' => $reason], $actorId, fn () => $this->performCancel($original, $reason, $actorId, $options));
+    }
+
+    public function discard(Invoice|string $invoice, string $reason, ?int $actorId = null): Invoice
+    {
+        return $this->audited('invoice.discard', $invoice, ['reason' => $reason], $actorId, fn () => $this->performDiscard($invoice, $reason, $actorId));
+    }
+
+    public function abandon(Invoice|string $invoice, string $reason, ?int $actorId = null): Invoice
+    {
+        return $this->audited('invoice.abandon', $invoice, ['reason' => $reason], $actorId, fn () => $this->performAbandon($invoice, $reason, $actorId));
+    }
+
+    /**
+     * Runs an operator action and, when it succeeds, appends it to the hash-chained audit log
+     * (action, invoice, reason, resulting document, actor). Failed attempts are not audited: they changed nothing.
+     *
+     * @template T
+     * @param array<string, mixed> $changes
+     * @param \Closure(): T $operation
+     * @return T
+     */
+    private function audited(string $action, Invoice|string $invoice, array $changes, ?int $actorId, \Closure $operation): mixed
+    {
+        $result = $operation();
+
+        $subject = $invoice instanceof Invoice ? $invoice : Invoice::query()->where('public_id', $invoice)->first();
+        if ($result instanceof IssueResult) {
+            $data = $result->toArray();
+            $changes += ['document' => $data['invoice_id'] ?? null, 'counter' => $data['counter'] ?? null, 'uuid' => $data['uuid'] ?? null];
+        } elseif ($result instanceof Invoice) {
+            $changes += ['status' => $result->processing_status->value];
+        } elseif (is_string($result)) {
+            $changes += ['submission' => $result];
+        }
+        $this->audit->record($action, 'invoice', $subject?->id === null ? null : (int) $subject->id,
+            array_filter($changes + ['invoice' => $subject?->public_id], static fn ($v) => $v !== null), $actorId);
+
+        return $result;
     }
 
     // ------------------------------------------------------------------ A. Retry submission
@@ -68,7 +142,7 @@ final class InvoiceOperations
      * @param bool $now submit inside this call instead of queuing it
      * @return string the submission status
      */
-    public function retry(Invoice|string $invoice, ?int $actorId = null, bool $now = false): string
+    private function performRetry(Invoice|string $invoice, ?int $actorId = null, bool $now = false): string
     {
         $invoice = $this->find($invoice);
         $issuance = $this->currentIssuance($invoice);
@@ -118,7 +192,7 @@ final class InvoiceOperations
      * @param array<string, mixed> $payload the full corrected invoice JSON
      * @throws InvoiceValidationException nothing is saved when the correction is invalid
      */
-    public function correct(Invoice|string $invoice, array $payload, string $reason, ?int $actorId = null): IssueResult
+    private function performCorrect(Invoice|string $invoice, array $payload, string $reason, ?int $actorId = null): IssueResult
     {
         $invoice = $this->find($invoice);
         $reason = trim($reason);
@@ -218,7 +292,7 @@ final class InvoiceOperations
     }
 
     /** New issuance from the unchanged JSON, for a rejection caused by the package or a certificate. */
-    public function reissueUnchanged(Invoice|string $invoice, string $reason, ?int $actorId = null): IssueResult
+    private function performReissueUnchanged(Invoice|string $invoice, string $reason, ?int $actorId = null): IssueResult
     {
         $invoice = $this->find($invoice);
         if (trim($reason) === '') {
@@ -245,7 +319,7 @@ final class InvoiceOperations
     }
 
     /** Releases a correction held for approval. With four-eyes on, the approver must not be the corrector. */
-    public function approve(Invoice|string $invoice, int $approverId): IssueResult
+    private function performApprove(Invoice|string $invoice, int $approverId): IssueResult
     {
         $invoice = $this->find($invoice);
         if (! $invoice->requires_approval || $invoice->processing_status !== ProcessingStatus::ManualReview) {
@@ -274,13 +348,13 @@ final class InvoiceOperations
      * @param array<string, mixed> $payload note lines (and invoice_number); buyer/supply date default to the original's
      * @param array{device?: int|string, external_id?: string} $options
      */
-    public function creditNote(Invoice|string $original, array $payload, string $reason, ?int $actorId = null, array $options = []): IssueResult
+    private function performCreditNote(Invoice|string $original, array $payload, string $reason, ?int $actorId = null, array $options = []): IssueResult
     {
         return $this->note('credit_note', $original, $payload, $reason, $actorId, $options);
     }
 
     /** Increase an accepted invoice with a debit note (383) in the same workflow. */
-    public function debitNote(Invoice|string $original, array $payload, string $reason, ?int $actorId = null, array $options = []): IssueResult
+    private function performDebitNote(Invoice|string $original, array $payload, string $reason, ?int $actorId = null, array $options = []): IssueResult
     {
         return $this->note('debit_note', $original, $payload, $reason, $actorId, $options);
     }
@@ -345,7 +419,7 @@ final class InvoiceOperations
      * @param array{invoice_number?: string, device?: int|string, external_id?: string, source?: mixed} $options
      *        invoice_number defaults to "{original number}-CN"
      */
-    public function cancel(Invoice|string $original, string $reason, ?int $actorId = null, array $options = []): IssueResult
+    private function performCancel(Invoice|string $original, string $reason, ?int $actorId = null, array $options = []): IssueResult
     {
         $original = $this->find($original);
         if ($original->cancellation_invoice_id !== null) {
@@ -383,7 +457,7 @@ final class InvoiceOperations
     }
 
     /** Withdraw an invoice that was never signed (no ICV used, nothing sent to ZATCA). */
-    public function discard(Invoice|string $invoice, string $reason, ?int $actorId = null): Invoice
+    private function performDiscard(Invoice|string $invoice, string $reason, ?int $actorId = null): Invoice
     {
         $invoice = $this->find($invoice);
         $this->requireReason($reason);
@@ -407,7 +481,7 @@ final class InvoiceOperations
      * Close an invoice whose document ZATCA rejected and that is no longer needed. The rejected document
      * stays in the chain and in the history. ⚠ ZATCA guidance on abandoning rejected documents is not explicit.
      */
-    public function abandon(Invoice|string $invoice, string $reason, ?int $actorId = null): Invoice
+    private function performAbandon(Invoice|string $invoice, string $reason, ?int $actorId = null): Invoice
     {
         $invoice = $this->find($invoice);
         $this->requireReason($reason);

@@ -35,13 +35,16 @@ Vault or similar.
 
 - Logs never contain keys, secrets, OTPs or full invoice XML. Stored submission attempts contain the
   hash and UUID instead of the XML, and ZATCA's response with sensitive values removed.
-- Device registration, onboarding and renewal are written to an append-only, hash-chained audit log;
-  `php artisan zatca:audit:verify` detects tampering. Every invoice status change, with actor and
+- Device registration, onboarding and renewal, and every operator action on invoices (retry, correct,
+  reissue, approve, credit/debit note, cancel, discard, abandon — from code, Artisan or the dashboard) are
+  written to an append-only, hash-chained audit log; `php artisan zatca:audit:verify` detects tampering. Every invoice status change, with actor and
   reason, is written to `zatca_processing_logs`.
 
 ## Access control
 
 - The HTTP API has no authentication of its own: add your middleware (see [HTTP API](./http-api)).
+- The dashboard checks a `zatca.*` permission on every page and action, on top of your login middleware
+  (see [Dashboard](./dashboard#who-may-do-what)).
 - Operations accept an `actorId` that is recorded in the history. Pass the authenticated user.
 - Four-eyes approval for corrections: `zatca.correction.four_eyes = true`.
 - The M7 dashboard will use Laravel's Gate (or your own `PermissionResolver`) for role-based access.

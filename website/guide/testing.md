@@ -186,15 +186,31 @@ All these paths are also covered by the package's automated tests (`composer tes
 | 11.5 | `php artisan zatca:devices:check-expiry` | No expiring certificates (sandbox certificates are new) |
 | 11.6 | `php artisan schedule:list` | `zatca:outbox:relay`, `outbox:prune`, `chain:verify`, `deadlines:check`, `reconcile`, `devices:check-expiry` |
 
-## 12. Security checks
+## 12. Dashboard
+
+Log in to your app as a user with the dashboard permissions (in `APP_ENV=local` every logged-in user has
+them, see [Dashboard](./dashboard#who-may-do-what)).
+
+| # | Do | Expect |
+|---|---|---|
+| 12.1 | Open `/admin/zatca` | Overview with the B2B and B2C panels and the numbers of the invoices you created |
+| 12.2 | B2C list → tab *Reported*, search `T-B2C` | Only matching invoices |
+| 12.3 | Open an invoice, go through every tab | Lines with discounts (step 5), JSON, issuance with UUID/ICV/hash, submissions, history |
+| 12.4 | *Issuances* → Download signed XML | An `.xml` file |
+| 12.5 | On a reported invoice: *Cancel (credit note)* with a reason | Green message; *Summary* links to the credit note |
+| 12.6 | `php artisan zatca:audit:verify` | Intact; the cancel appears in `zatca_audit_logs` with your user ID |
+| 12.7 | Log in as a user without permissions (with `APP_ENV=production` and a `Zatca::auth()` callback that returns `false`) | `403` |
+| 12.8 | View the page source | No keys, secrets or OTPs |
+
+## 13. Security checks
 
 | # | Check | Expect |
 |---|---|---|
-| 12.1 | `zatca_device_keys.encrypted_private_key` | Encrypted text, not a PEM key |
-| 12.2 | `zatca_certificates.encrypted_secret` | Encrypted |
-| 12.3 | `grep -ri "PRIVATE KEY\|123345" storage/logs` | Nothing |
-| 12.4 | Signed XML files on the storage disk | Not under `public/`; no public URL |
-| 12.5 | Invoice events (dump one in a listener) | No keys, secrets or OTPs |
+| 13.1 | `zatca_device_keys.encrypted_private_key` | Encrypted text, not a PEM key |
+| 13.2 | `zatca_certificates.encrypted_secret` | Encrypted |
+| 13.3 | `grep -ri "PRIVATE KEY\|123345" storage/logs` | Nothing |
+| 13.4 | Signed XML files on the storage disk | Not under `public/`; no public URL |
+| 13.5 | Invoice events (dump one in a listener) | No keys, secrets or OTPs |
 
 ## Run the package's own tests
 

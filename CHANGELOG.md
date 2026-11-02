@@ -5,6 +5,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (M7a — dashboard, part 1)
+- Web dashboard at `/admin/zatca` (Blade, one prebuilt CSS file, no JavaScript): overview, B2B and B2C lists
+  (status tabs, search, filters), invoice detail (summary, lines, JSON versions, issuances, submissions,
+  errors and warnings, history, notes), actions (retry, reissue, approve, cancel, discard, abandon),
+  signed/cleared XML download.
+- Permissions: every route checks a `zatca.*` ability through `PermissionResolver`
+  (`Zatca::auth()` callback → Gates/Spatie → deny, except `APP_ENV=local`).
+- `ui.*` and `authorization.resolver` config now take effect; `vendor:publish --tag=zatca-views`.
+- Operator actions on invoices are written to the hash-chained audit log.
+
 ## [0.6.0-alpha.1] - not yet tagged (M6.1)
 
 ### Added

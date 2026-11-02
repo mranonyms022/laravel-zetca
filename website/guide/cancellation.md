@@ -8,7 +8,8 @@ ZATCA has no "delete" or "void". What you can do depends on how far the invoice 
 | Never signed (invalid JSON, waiting, failed before signing) | `discard()` | Status `CANCELLED`; no counter, UUID or hash was used |
 | Rejected by ZATCA and you won't fix it | `abandon()` ⚠ | Status `ABANDONED`; the rejected document stays in the history |
 
-All three need a reason, are recorded in the history and the audit log, and fire `InvoiceCancelled`.
+All three need a reason, are recorded in the invoice history and the hash-chained audit log, and fire
+`InvoiceCancelled`. They are also available in the [dashboard](./dashboard).
 
 ## Cancel an accepted invoice
 

@@ -9,3 +9,4 @@ composer.lock
 
 # Test-only key/certificate fixtures must be committed
 !tests/Fixtures/**/*.pem
+/assets/node_modules/

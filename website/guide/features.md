@@ -60,6 +60,8 @@ rule not yet confirmed in official documentation.
 | Events for every outcome | `InvoiceAccepted`, `InvoiceRejected`, `InvoiceCancelled`, … | [Events](./events) |
 | Multi-company and multi-tenant | tenant resolver | [Multi-company and multi-tenant](./tenancy) |
 | Queues, workers, scheduler | `queue:work`, outbox relay | [Queues and workers](./workers) |
+| Web dashboard: overview, B2B/B2C lists, invoice detail, actions, XML download, permissions | `/admin/zatca`, `Zatca::auth()` | [Dashboard](./dashboard) |
+| Audit trail of every operator action (hash-chained) | `zatca:audit:verify` | [Security](./security) |
 
 ## Reliability and security
 
@@ -76,6 +78,7 @@ rule not yet confirmed in official documentation.
 
 | Feature | Planned |
 |---|---|
-| Web dashboard (lists, actions, device wizard, roles) | M7 |
+| Dashboard: devices and bulk import, errors, queue, audit, settings | M7b |
+| Dashboard: correction editor, note forms, charts, reports and exports | M7c |
 | Batch HTTP endpoint, per-device in-flight limit | later; the config keys exist but are not used yet |
 | Prepaid amounts, currencies other than SAR | later |

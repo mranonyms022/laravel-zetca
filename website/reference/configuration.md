@@ -167,7 +167,15 @@ explicitly; confirm them with ZATCA or your tax advisor.
 | `retention.years` ⚠ | 6 | Retention period; confirm with your tax advisor |
 | `retention.outbox_processed_days` | 14 | Processed outbox rows are deleted after this |
 
-## Dashboard (M7, not yet available)
+## Dashboard
 
-`ui.enabled`, `ui.prefix`, `ui.domain`, `ui.middleware`, `ui.guard`, `ui.route_name_prefix`, `ui.theme` and
-`authorization.resolver` are reserved for the dashboard (M7) and have no effect yet.
+| Key | Env | Default | Description |
+|---|---|---|---|
+| `ui.enabled` | `ZATCA_UI_ENABLED` | `true` | Register the [dashboard](/guide/dashboard) routes |
+| `ui.prefix` | `ZATCA_UI_PREFIX` | `admin/zatca` | URL prefix |
+| `ui.domain` | `ZATCA_UI_DOMAIN` | `null` | Serve only on this domain |
+| `ui.middleware` | | `['web', 'auth']` | Middleware stack (your authentication) |
+| `ui.guard` | `ZATCA_UI_GUARD` | `null` | Auth guard for the current user (`null` = default) |
+| `ui.route_name_prefix` | | `zatca.` | Route name prefix |
+| `ui.theme` | | `light` | `light`, `dark` or `auto` |
+| `authorization.resolver` | | `null` | Class implementing `PermissionResolver` (`null` = `Zatca::auth()` callback, then Gates/Spatie) |

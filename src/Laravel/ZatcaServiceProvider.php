@@ -151,6 +151,11 @@ final class ZatcaServiceProvider extends ServiceProvider
             (int) config('zatca.http.circuit.failures', 5),
             (int) config('zatca.http.circuit.open_seconds', 60),
         ));
+        $app->singleton(Dashboard\PermissionResolver::class, static function (Application $app): Dashboard\PermissionResolver {
+            $class = config('zatca.authorization.resolver');
+
+            return $class ? $app->make((string) $class) : $app->make(Dashboard\DefaultPermissionResolver::class);
+        });
         $app->bind('zatca.b2c', static fn (Application $app) => new Invoices\InvoiceIssuer(
             \CodingTriplets\Zatca\Core\Domain\Enums\Workflow::B2C,
             $app->make(Invoices\InvoiceIntakeService::class),
@@ -214,7 +219,33 @@ final class ZatcaServiceProvider extends ServiceProvider
             $this->loadRoutesFrom(__DIR__ . '/../../routes/api.php');
         }
 
+        $this->bootDashboard();
+
         $this->warnAboutUnsafeSetups();
+    }
+
+    private function bootDashboard(): void
+    {
+        $this->loadViewsFrom(__DIR__ . '/../../resources/views', 'zatca');
+        if ($this->app->runningInConsole()) {
+            $this->publishes([__DIR__ . '/../../resources/views' => resource_path('views/vendor/zatca')], 'zatca-views');
+        }
+        if (! config('zatca.ui.enabled', true)) {
+            return;
+        }
+
+        $this->app['router']->aliasMiddleware('zatca.can', Dashboard\Http\Middleware\AuthorizeDashboard::class);
+        $this->loadRoutesFrom(__DIR__ . '/../../routes/web.php');
+
+        // $can('zatca.b2b.view') in the dashboard views.
+        $this->app['view']->composer('zatca::dashboard.*', function (\Illuminate\Contracts\View\View $view): void {
+            $permissions = $this->app->make(Dashboard\PermissionResolver::class);
+            $guard = config('zatca.ui.guard');
+            $user = $this->app['auth']->guard($guard ?: null)->user();
+            $view->with('can', static fn (string $ability, mixed $subject = null): bool => $permissions->allows($user, $ability, $subject));
+            $prefix = (string) config('zatca.ui.route_name_prefix', 'zatca.');
+            $view->with('zroute', static fn (string $name, mixed $parameters = []): string => route($prefix . $name, $parameters));
+        });
     }
 
     private function validateConfiguration(): void

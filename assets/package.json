@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "description": "Builds resources/dist/zatca.css for the dashboard. Run: npm ci && npm run build",
+  "scripts": {
+    "build": "tailwindcss -c tailwind.config.js -i app.css -o ../resources/dist/zatca.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

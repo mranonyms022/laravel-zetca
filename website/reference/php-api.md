@@ -69,6 +69,15 @@ Both return an `InvoiceIssuer` bound to one workflow. A B2C issuer never accepts
 Options: `ids` (`auto` \| `external` \| `package`), `onboard` (default `true`), `actor_id`. See
 [Devices from code and Excel](/guide/device-import).
 
+## Dashboard authorization — `Zatca::auth()`
+
+```php
+Zatca::auth(fn ($user, string $ability, $subject = null): bool => …);
+```
+
+Decides every dashboard permission (`zatca.*`); `$subject` is the invoice for invoice pages and actions.
+See [Dashboard](/guide/dashboard#who-may-do-what).
+
 ## Exceptions
 
 | Exception | Namespace | When |

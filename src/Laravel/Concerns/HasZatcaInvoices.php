@@ -20,11 +20,22 @@ trait HasZatcaInvoices
 {
     public function zatcaInvoices(): MorphMany
     {
-        return $this->morphMany(Invoice::class, 'source', 'source_type', 'source_id');
+        return $this->morphMany(Invoice::class, 'source', 'source_type', 'source_id', 'zatca_source_key');
     }
 
     public function zatcaInvoice(): MorphOne
     {
-        return $this->morphOne(Invoice::class, 'source', 'source_type', 'source_id')->latestOfMany('id');
+        return $this->morphOne(Invoice::class, 'source', 'source_type', 'source_id', 'zatca_source_key')->latestOfMany('id');
+    }
+
+    /**
+     * `source_id` is a string column (it also holds UUIDs and other non-numeric IDs). Comparing it with an
+     * integer key fails on PostgreSQL (varchar = integer), so the relations always use the key as a string.
+     */
+    public function getZatcaSourceKeyAttribute(): ?string
+    {
+        $key = $this->getKey();
+
+        return $key === null ? null : (string) $key;
     }
 }

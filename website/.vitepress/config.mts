@@ -63,6 +63,7 @@ export default defineConfig({
         {
           text: 'Operations',
           items: [
+            { text: 'Dashboard', link: '/guide/dashboard' },
             { text: 'Monitoring and daily checks', link: '/guide/monitoring' },
             { text: 'Performance and scaling', link: '/guide/scaling' },
             { text: 'Security', link: '/guide/security' },
