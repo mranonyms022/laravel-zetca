@@ -241,7 +241,7 @@ final class InvoiceIntakeService
         $query = Device::query();
         $found = is_int($device) || ctype_digit((string) $device)
             ? $query->find((int) $device)
-            : $query->where('device_uuid', (string) $device)->first();
+            : (\Illuminate\Support\Str::isUuid((string) $device) ? $query->where('device_uuid', (string) $device)->first() : null);
 
         if ($found === null) {
             throw new \InvalidArgumentException("Device [{$device}] was not found.");

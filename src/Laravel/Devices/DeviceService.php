@@ -286,6 +286,9 @@ final class DeviceService
 
         return ctype_digit($ref)
             ? Device::query()->findOrFail((int) $ref)
-            : Device::query()->where('device_uuid', $ref)->orWhere('name', $ref)->firstOrFail();
+            : Device::query()->where(static fn ($q) => \Illuminate\Support\Str::isUuid($ref)
+                ? $q->where('device_uuid', $ref)->orWhere('name', $ref)
+                : $q->where('name', $ref))   // device_uuid is a uuid column on PostgreSQL
+                ->firstOrFail();
     }
 }

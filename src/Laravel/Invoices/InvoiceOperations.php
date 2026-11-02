@@ -570,7 +570,7 @@ final class InvoiceOperations
     {
         $deviceModel = is_int($device) || ctype_digit((string) $device)
             ? Device::query()->withoutGlobalScopes()->find((int) $device)
-            : Device::query()->withoutGlobalScopes()->where('device_uuid', (string) $device)->first();
+            : (\Illuminate\Support\Str::isUuid((string) $device) ? Device::query()->withoutGlobalScopes()->where('device_uuid', (string) $device)->first() : null);
         if ($deviceModel === null) {
             return;   // the issuer reports the missing device
         }

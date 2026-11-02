@@ -6,6 +6,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- PostgreSQL: searching or referencing a device / invoice by text that is not a UUID (e.g. a device name)
+  compared it with a `uuid` column, which PostgreSQL rejects. UUID columns are now only compared with valid
+  UUIDs (dashboard searches, `devices()->onboard('POS-01')`, device options of issue / notes).
 - `composer.json` now requires `guzzlehttp/psr7` ^2.0. With older dependency sets Composer could install
   psr7 1.x, which lacks `HttpFactory`, and every call to ZATCA failed with "Class not found".
 

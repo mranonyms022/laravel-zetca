@@ -67,7 +67,7 @@ final class InvoiceListQuery
                 $w->where('invoice_number', 'like', $like)
                     ->orWhere('external_invoice_id', 'like', $like)
                     ->orWhere('public_id', $q)
-                    ->orWhere('current_uuid', $q)
+                    ->when(\Illuminate\Support\Str::isUuid($q), static fn ($u) => $u->orWhere('current_uuid', $q))   // uuid column (PostgreSQL)
                     ->orWhere('buyer_vat_number', $q);
             });
         }

@@ -38,7 +38,8 @@ final class DeviceController
             ->when(($env = (string) $request->query('environment', '')) !== '', static fn ($query) => $query->where('environment', $env))
             ->when($q !== '', static fn ($query) => $query->where(static fn ($w) => $w
                 ->where('name', 'like', str_replace(['%', '_'], ['\\%', '\\_'], $q) . '%')
-                ->orWhere('device_uuid', $q)->orWhere('serial_number', $q)))
+                ->when(\Illuminate\Support\Str::isUuid($q), static fn ($u) => $u->orWhere('device_uuid', $q))   // uuid column (PostgreSQL)
+                ->orWhere('serial_number', $q)))
             ->orderBy('name')
             ->paginate(50)->withQueryString();
 
