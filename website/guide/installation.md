@@ -62,6 +62,11 @@ ZATCA_CA_BUNDLE=/path/to/cacert.pem
 php artisan migrate
 ```
 
+::: tip SQL Server
+Install Microsoft ODBC Driver 18 and the `sqlsrv` / `pdo_sqlsrv` PHP extensions first, see
+[SQL Server setup](./sql-server).
+:::
+
 The package creates its tables with the prefix `zatca_` (configurable with `ZATCA_TABLE_PREFIX`). To
 review the migration files first:
 

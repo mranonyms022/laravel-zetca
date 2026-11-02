@@ -27,6 +27,7 @@ export default defineConfig({
             { text: 'Key concepts', link: '/guide/concepts' },
             { text: 'Requirements', link: '/guide/requirements' },
             { text: 'Installation', link: '/guide/installation' },
+            { text: 'SQL Server setup', link: '/guide/sql-server' },
             { text: 'Quick start (sandbox)', link: '/guide/quick-start' },
             { text: 'Test plan (sandbox)', link: '/guide/testing' },
           ],

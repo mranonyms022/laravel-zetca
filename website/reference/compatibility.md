@@ -31,7 +31,7 @@ on them, but use Laravel 12 or 13 for new projects and plan the upgrade for exis
 | MariaDB 10.x / 11.x | ✅ Full integration suite, locally and in CI, including concurrent issuance from 6 processes |
 | MySQL 8 | ✅ Full suite on MySQL 8.3 (local) and 8.4 (CI) |
 | PostgreSQL 16 | ✅ Full suite in CI |
-| SQL Server 2022 | ❌ The CI run fails; being fixed. Do not use yet |
+| SQL Server 2019+ | ✅ Supported ⚠ the automated suite has not completed a run yet (CI setup issue with the ODBC driver, not a package error). Install the driver and extensions as in [SQL Server setup](/guide/sql-server) and run the package tests once against your server |
 
 ## ZATCA environments
 

@@ -8,6 +8,9 @@ and the project uses [Semantic Versioning](https://semver.org/).
 ### Changed
 - Minimum Laravel 9 version is now 9.52 (the final 9.x release); earlier 9.x releases were never tested.
 
+### Added (docs)
+- SQL Server setup guide: ODBC Driver 18, `sqlsrv` / `pdo_sqlsrv` DLLs for Windows, Linux, Docker, macOS.
+
 ### Fixed
 - PostgreSQL: searching or referencing a device / invoice by text that is not a UUID (e.g. a device name)
   compared it with a `uuid` column, which PostgreSQL rejects. UUID columns are now only compared with valid

@@ -76,7 +76,7 @@ rule not yet confirmed in official documentation.
 | Lost-message recovery | `zatca:reconcile` — [Monitoring](./monitoring) |
 | Load shedding (`429`/`503`) | [HTTP API](./http-api#load-shedding), [Scaling](./scaling) |
 | Encrypted private keys and secrets, OTPs never stored, redacted logs, TLS verification, XXE protection | [Security](./security) |
-| Laravel 9.52+–13, PHP 8.1+, MySQL/MariaDB/PostgreSQL (SQL Server not yet) | [Requirements](./requirements), [Compatibility](/reference/compatibility) |
+| Laravel 9.52+–13, PHP 8.1+, MySQL/MariaDB/PostgreSQL/SQL Server ⚠ | [Requirements](./requirements), [Compatibility](/reference/compatibility) |
 
 ## Not available yet
 
