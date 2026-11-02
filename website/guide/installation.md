@@ -16,7 +16,7 @@ Until the package is on Packagist, install it from GitHub:
 ```
 
 ```bash
-composer require codingtriplets/laravel-zatca:^0.7
+composer require codingtriplets/laravel-zatca:^0.7.1
 ```
 
 The service provider and the `Zatca` facade are registered automatically.

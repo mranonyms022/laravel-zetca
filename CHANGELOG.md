@@ -5,6 +5,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-03
+
 ### Added
 - HTTP API: `POST invoices/{invoice_id}/credit-note`, `/debit-note` and `/cancel`.
 - HTTP API: the device can be sent as `"device"` in the JSON body instead of the `X-Zatca-Device` header.
