@@ -97,8 +97,11 @@ jobs:
       - name: Install Microsoft ODBC Driver 18
         if: matrix.db == 'sqlsrv'
         run: |
-          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
-          curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          # the runner image may already have Microsoft's repository and key: only add them when missing
+          if ! grep -rqs "packages.microsoft.com/ubuntu/24.04/prod" /etc/apt/sources.list /etc/apt/sources.list.d/; then
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+            curl -fsSL https://packages.microsoft.com/config/ubuntu/24.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          fi
           sudo apt-get update
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
       - uses: shivammathur/setup-php@v2
