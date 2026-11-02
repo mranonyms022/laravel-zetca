@@ -5,6 +5,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-03
+
+First tagged release: everything below (M1–M7). Before 1.0, minor versions may change the database schema; read this changelog and run `php artisan migrate` after updating. Test in the ZATCA sandbox before going to production.
+
 ### Changed
 - Minimum Laravel 9 version is now 9.52 (the final 9.x release); earlier 9.x releases were never tested.
 
