@@ -130,6 +130,13 @@ return [
         'enabled' => env('ZATCA_API_ENABLED', false),
         'prefix' => env('ZATCA_API_PREFIX', 'api/zatca'),
         'middleware' => ['api'],
+        // basic: HTTP Basic with the credentials below (fails closed when they are empty).
+        // none:  no package auth; only when zatca.api.middleware authenticates callers itself (e.g. auth:sanctum).
+        'auth' => env('ZATCA_API_AUTH', 'basic'),
+        'basic' => [
+            'username' => env('ZATCA_API_USERNAME'),
+            'password' => env('ZATCA_API_PASSWORD'),
+        ],
         'batch_max' => 500,   // reserved: batch endpoint not implemented yet
     ],
 

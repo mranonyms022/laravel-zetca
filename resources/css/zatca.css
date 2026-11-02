@@ -1,0 +1,11 @@
+/*
+ * Source of resources/dist/zatca.css (the dashboard stylesheet, shipped prebuilt so host apps need no Node).
+ * Rebuild after changing classes in resources/views:
+ *   npx tailwindcss@3.4.17 -c resources/css/tailwind.config.js -i resources/css/zatca.css -o resources/dist/zatca.css --minify
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+summary::-webkit-details-marker { display: none; }
+summary { list-style: none; }

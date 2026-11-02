@@ -12,6 +12,7 @@ use CodingTriplets\Zatca\Laravel\Database\Models\Company;
 use CodingTriplets\Zatca\Laravel\Database\Models\Device;
 use CodingTriplets\Zatca\Laravel\Devices\CertificateRenewalService;
 use CodingTriplets\Zatca\Laravel\Devices\DeviceService;
+use CodingTriplets\Zatca\Laravel\Devices\OrganisationManager;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -187,6 +188,61 @@ final class DeviceController
 
         return redirect($this->zroute('devices.show', $device->id))
             ->with($ok ? 'zatca_status' : 'zatca_error', $ok ? 'Certificate renewed.' : 'Renewal failed: ' . ($renewal->error ?? (string) $renewal->status));
+    }
+
+    public function edit(Request $request, int $device, OrganisationManager $organisation): View
+    {
+        $this->authorizeAbility($request, Abilities::DEVICES_ONBOARD);
+        $device = Device::query()->with(['company:id,name_en', 'branch:id,name,code'])->findOrFail($device);
+
+        return view('zatca::dashboard.devices.edit', [
+            'device' => $device,
+            'editable' => $organisation->deviceIsEditable($device),
+            'stores' => Branch::query()->where('company_id', $device->company_id)->orderBy('name')->get(['id', 'code', 'name']),
+        ]);
+    }
+
+    public function update(Request $request, int $device, OrganisationManager $organisation): RedirectResponse
+    {
+        $this->authorizeAbility($request, Abilities::DEVICES_ONBOARD);
+        $device = Device::query()->findOrFail($device);
+
+        try {
+            $organisation->updateDevice($device, $request->only(['name', 'store_id', 'industry', 'location']), $this->actorId($request));
+        } catch (ZatcaException|\InvalidArgumentException $e) {
+            return back()->withInput()->with('zatca_error', $e->getMessage());
+        }
+
+        return redirect($this->zroute('devices.index'))->with('zatca_status', "Device {$device->name} updated.");
+    }
+
+    public function toggle(Request $request, int $device, string $toggle, OrganisationManager $organisation): RedirectResponse
+    {
+        $this->authorizeAbility($request, Abilities::DEVICES_ONBOARD);
+        $device = Device::query()->findOrFail($device);
+
+        try {
+            $toggle === 'enable'
+                ? $organisation->enableDevice($device, $this->actorId($request))
+                : $organisation->disableDevice($device, $this->actorId($request));
+        } catch (ZatcaException $e) {
+            return back()->with('zatca_error', $e->getMessage());
+        }
+
+        return back()->with('zatca_status', $toggle === 'enable'
+            ? "Device {$device->name} enabled ({$device->lifecycle_status->value})."
+            : "Device {$device->name} disabled: it refuses new invoices until you enable it.");
+    }
+
+    public function destroy(Request $request, int $device, OrganisationManager $organisation): RedirectResponse
+    {
+        $this->authorizeAbility($request, Abilities::DEVICES_ONBOARD);
+        $device = Device::query()->findOrFail($device);
+        $result = $organisation->deleteDevice($device, $this->actorId($request));
+
+        return redirect($this->zroute('devices.index'))->with('zatca_status', $result === 'deleted'
+            ? "Device {$device->name} deleted."
+            : "Device {$device->name} has invoices or a production certificate, so it was decommissioned instead of deleted (records are kept for the retention period).");
     }
 
     private function onboardingResult(Device $device, string $status, string $error): RedirectResponse

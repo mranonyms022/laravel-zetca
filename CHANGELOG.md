@@ -5,6 +5,24 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **HTTP API: HTTP Basic authentication is on by default.** Set `ZATCA_API_USERNAME` and `ZATCA_API_PASSWORD`;
+  until both are set every API request gets `401`. Set `ZATCA_API_AUTH=none` to keep authenticating only with your
+  own `zatca.api.middleware` (e.g. `auth:sanctum`) as before.
+- Dashboard redesign: sidebar with icons, page header, cards, and tables with consistent action buttons.
+  Companies and stores are shown as two tables; devices as a table with row actions.
+
+### Added
+- Dashboard: **Edit**, **Disable / Enable** and **Delete** for companies, stores and devices
+  (`zatca.companies.manage` / `zatca.devices.onboard`), all recorded in the audit history.
+  - A disabled company or store refuses new invoices on all its devices; a disabled device is `SUSPENDED`.
+  - Companies and stores can only be deleted while no device or invoice belongs to them (soft delete; adding the
+    same VAT number or store code again restores them). A device that issued documents or holds a production
+    certificate is decommissioned instead of deleted.
+  - Device name, store, industry and location can only be edited before onboarding (they are in the certificate).
+- Migration `add_zatca_branch_status`: `status` column on stores. Run `php artisan migrate`.
+- `resources/css`: Tailwind source and config of the prebuilt dashboard stylesheet.
+
 ## [0.7.1] - 2026-11-03
 
 ### Added

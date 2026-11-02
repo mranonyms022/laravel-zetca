@@ -61,7 +61,13 @@ final class CompanyService
         }
 
         /** @var Company $company */
-        $company = Company::query()->findOrFail($registration->company_id);
+        $company = Company::query()->withTrashed()->findOrFail($registration->company_id);
+        if ($company->trashed()) {
+            // deleted from the dashboard and created again: bring it back (the VAT registration is unique)
+            $company->restore();
+            $company->forceFill(['status' => 'active'])->save();
+            $registration->forceFill(['status' => 'active'])->save();
+        }
         if ($ref !== null && $company->external_ref === null) {
             $company->forceFill(['external_ref' => $ref])->save();
         }
@@ -88,8 +94,14 @@ final class CompanyService
         $ref = $this->ref($data['external_ref'] ?? null);
 
         $branch = Branch::query()->where('company_id', $company->id)->where('code', $code)->first()
-            ?? ($ref !== null ? Branch::query()->where('company_id', $company->id)->where('external_ref', $ref)->first() : null)
-            ?? $this->registrar->registerBranch((int) $company->id, $code, $name, isset($data['address']) ? (array) $data['address'] : null);
+            ?? ($ref !== null ? Branch::query()->where('company_id', $company->id)->where('external_ref', $ref)->first() : null);
+        if ($branch === null && ($deleted = Branch::query()->onlyTrashed()->where('company_id', $company->id)->where('code', $code)->first()) !== null) {
+            // deleted from the dashboard and created again: the code is unique per company, so restore it
+            $deleted->restore();
+            $deleted->forceFill(['name' => $name, 'status' => 'active'])->save();
+            $branch = $deleted;
+        }
+        $branch ??= $this->registrar->registerBranch((int) $company->id, $code, $name, isset($data['address']) ? (array) $data['address'] : null);
 
         if ($ref !== null && $branch->external_ref === null) {
             $branch->forceFill(['external_ref' => $ref])->save();

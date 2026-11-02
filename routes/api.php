@@ -3,12 +3,14 @@
 declare(strict_types=1);
 
 use CodingTriplets\Zatca\Laravel\Http\Controllers\InvoiceApiController;
+use CodingTriplets\Zatca\Laravel\Http\Middleware\ApiBasicAuth;
 use CodingTriplets\Zatca\Laravel\Http\Middleware\ShedLoad;
 use Illuminate\Support\Facades\Route;
 
-// Optional (zatca.api.enabled). Protect it with your own auth middleware in zatca.api.middleware.
+// Optional (zatca.api.enabled). HTTP Basic auth by default (zatca.api.auth / zatca.api.basic); authentication runs
+// before load shedding so unauthenticated calls never count against the in-flight limit.
 Route::prefix((string) config('zatca.api.prefix', 'api/zatca'))
-    ->middleware(array_merge((array) config('zatca.api.middleware', ['api']), [ShedLoad::class]))
+    ->middleware(array_merge((array) config('zatca.api.middleware', ['api']), [ApiBasicAuth::class, ShedLoad::class]))
     ->group(static function (): void {
         Route::post('b2c/invoices', [InvoiceApiController::class, 'b2c'])->name('zatca.api.b2c');
         Route::post('b2b/invoices', [InvoiceApiController::class, 'b2b'])->name('zatca.api.b2b');

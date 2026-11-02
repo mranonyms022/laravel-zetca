@@ -12,6 +12,7 @@ use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\InvoiceController;
 use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\InvoiceEditorController;
 use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\OperationsController;
 use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\ReportController;
+use CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers\StoreController;
 use Illuminate\Support\Facades\Route;
 
 // Dashboard (zatca.ui.enabled). Your authentication comes from zatca.ui.middleware; every route also checks a
@@ -62,10 +63,24 @@ $group->group(static function (): void {
     Route::post('devices/{device}/onboard', [DeviceController::class, 'onboard'])->name('devices.onboard')->whereNumber('device');
     Route::post('devices/{device}/resume', [DeviceController::class, 'resume'])->name('devices.resume')->whereNumber('device');
     Route::post('devices/{device}/renew', [DeviceController::class, 'renew'])->name('devices.renew')->whereNumber('device');
+    Route::get('devices/{device}/edit', [DeviceController::class, 'edit'])->name('devices.edit')->whereNumber('device');
+    Route::put('devices/{device}', [DeviceController::class, 'update'])->name('devices.update')->whereNumber('device');
+    Route::post('devices/{device}/{toggle}', [DeviceController::class, 'toggle'])->name('devices.toggle')->whereNumber('device')->where('toggle', 'enable|disable');
+    Route::delete('devices/{device}', [DeviceController::class, 'destroy'])->name('devices.destroy')->whereNumber('device');
 
     Route::get('companies', [CompanyController::class, 'index'])->name('companies.index');
     Route::post('companies', [CompanyController::class, 'store'])->name('companies.store');
     Route::post('companies/{company}/stores', [CompanyController::class, 'storeStore'])->name('companies.stores.store')->whereNumber('company');
+    Route::get('companies/{company}/edit', [CompanyController::class, 'edit'])->name('companies.edit')->whereNumber('company');
+    Route::put('companies/{company}', [CompanyController::class, 'update'])->name('companies.update')->whereNumber('company');
+    Route::post('companies/{company}/{toggle}', [CompanyController::class, 'toggle'])->name('companies.toggle')->whereNumber('company')->where('toggle', 'enable|disable');
+    Route::delete('companies/{company}', [CompanyController::class, 'destroy'])->name('companies.destroy')->whereNumber('company');
+
+    Route::post('stores', [StoreController::class, 'store'])->name('stores.store');
+    Route::get('stores/{store}/edit', [StoreController::class, 'edit'])->name('stores.edit')->whereNumber('store');
+    Route::put('stores/{store}', [StoreController::class, 'update'])->name('stores.update')->whereNumber('store');
+    Route::post('stores/{store}/{toggle}', [StoreController::class, 'toggle'])->name('stores.toggle')->whereNumber('store')->where('toggle', 'enable|disable');
+    Route::delete('stores/{store}', [StoreController::class, 'destroy'])->name('stores.destroy')->whereNumber('store');
 
     Route::get('errors', [ErrorController::class, 'index'])->name('errors.index');
     Route::get('errors/groups', [ErrorController::class, 'groups'])->name('errors.groups');

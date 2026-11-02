@@ -297,8 +297,7 @@ final class InvoiceProcessingTest extends IntegrationTestCase
 
     public function test_http_api_returns_the_queue_contract(): void
     {
-        config(['zatca.api.enabled' => true]);
-        $this->refreshRoutes();
+        $this->enableApi();
 
         $response = $this->postJson('/api/zatca/b2c/invoices', $this->payload('API-1'), ['X-Zatca-Device' => (string) $this->device->id]);
 
@@ -314,8 +313,7 @@ final class InvoiceProcessingTest extends IntegrationTestCase
 
     public function test_http_api_device_in_body_notes_and_cancel(): void
     {
-        config(['zatca.api.enabled' => true]);
-        $this->refreshRoutes();
+        $this->enableApi();
 
         // device in the body instead of the header; "device" is not stored as part of the payload
         $first = $this->postJson('/api/zatca/b2c/invoices', $this->payload('API-2') + ['device' => $this->device->device_uuid])
@@ -350,6 +348,38 @@ final class InvoiceProcessingTest extends IntegrationTestCase
         $this->postJson("/api/zatca/invoices/{$second['invoice_id']}/cancel", ['reason' => 'Again'])->assertStatus(409);
 
         $this->postJson('/api/zatca/invoices/01UNKNOWN000000000000000000/cancel', ['reason' => 'x'])->assertStatus(404);
+    }
+
+    public function test_http_api_requires_basic_auth(): void
+    {
+        $this->enableApi();
+        $this->flushHeaders();
+        $headers = ['X-Zatca-Device' => (string) $this->device->id];
+
+        $this->postJson('/api/zatca/b2c/invoices', $this->payload('API-AUTH'), $headers)
+            ->assertStatus(401)->assertHeader('WWW-Authenticate', 'Basic realm="ZATCA API", charset="UTF-8"');
+        $this->withBasicAuth('pos', 'wrong')->postJson('/api/zatca/b2c/invoices', $this->payload('API-AUTH'), $headers)->assertStatus(401);
+        $this->withBasicAuth('other', 'secret-123')->getJson('/api/zatca/invoices/01UNKNOWN000000000000000000')->assertStatus(401);
+        self::assertSame(0, Invoice::query()->count());
+
+        $this->withBasicAuth('pos', 'secret-123')->postJson('/api/zatca/b2c/invoices', $this->payload('API-AUTH'), $headers)->assertStatus(201);
+
+        // fails closed without configured credentials
+        config(['zatca.api.basic.password' => null]);
+        $this->withBasicAuth('pos', '')->getJson('/api/zatca/invoices/01UNKNOWN000000000000000000')
+            ->assertStatus(401)->assertJsonPath('message', 'API credentials are not configured (ZATCA_API_USERNAME / ZATCA_API_PASSWORD).');
+
+        // "none": the host's own middleware authenticates
+        config(['zatca.api.auth' => 'none']);
+        $this->flushHeaders();
+        $this->getJson('/api/zatca/invoices/01UNKNOWN000000000000000000')->assertStatus(404);
+    }
+
+    private function enableApi(): void
+    {
+        config(['zatca.api.enabled' => true, 'zatca.api.basic' => ['username' => 'pos', 'password' => 'secret-123']]);
+        $this->refreshRoutes();
+        $this->withBasicAuth('pos', 'secret-123');
     }
 
     private function zatca(): ZatcaManager

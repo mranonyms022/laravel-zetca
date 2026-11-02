@@ -10,3 +10,4 @@
 /.gitignore export-ignore
 /assets export-ignore
 /website export-ignore
+/resources/css export-ignore

@@ -2,8 +2,8 @@
 
 A web dashboard for your operators: invoices and their actions, devices (register, import from Excel/CSV,
 onboard with an OTP, renew), companies and stores, errors, the queue backlog, the audit history and the
-active settings, a correction editor, credit/debit note forms, reports with charts and CSV exports. It is plain Blade with one prebuilt CSS file — no JavaScript
-and no build step in your application.
+active settings, a correction editor, credit/debit note forms, reports with charts and CSV exports. It is plain Blade with one prebuilt CSS file — no JavaScript framework
+and no build step in your application (only small inline confirmations before disable / delete).
 
 
 ## Open it
@@ -40,9 +40,9 @@ Every page and every action checks a permission. Nobody gets access until you gr
 | `zatca.invoices.edit` | Discard a never-signed invoice |
 | `zatca.invoices.export` | Download signed / cleared XML |
 | `zatca.devices.view` | See devices, their certificates (public data only) and onboarding history |
-| `zatca.devices.onboard` | Register devices, import them from a file, onboard / resume with an OTP |
+| `zatca.devices.onboard` | Register, edit, disable / enable and delete devices, import them from a file, onboard / resume with an OTP |
 | `zatca.devices.renew` | Renew a device's production certificate with a new OTP |
-| `zatca.companies.view` / `zatca.companies.manage` | See / add companies and stores |
+| `zatca.companies.view` / `zatca.companies.manage` | See / add, edit, disable / enable and delete companies and stores |
 | `zatca.errors.view` / `zatca.errors.resolve` | See errors, groups and warnings / mark errors resolved |
 | `zatca.queue.view` | Queue monitor |
 | `zatca.audit.view` | Audit history and the tamper-chain check |
@@ -177,7 +177,15 @@ gets a leading apostrophe. No keys, XML or QR data are exported. Large exports a
 ### Devices
 
 **List** — search by name, UUID or serial; filter by status and environment. Certificates expiring within
-30 days are highlighted.
+30 days are highlighted. Each row has **Edit**, **Disable / Enable** and **Delete**:
+
+- **Edit** — name, store, industry and location are written into the certificate, so they can only be
+  changed while the device is *Registered* or *Onboarding failed*. Afterwards the page is read-only.
+- **Disable** — the device becomes *Suspended* and refuses new invoices (no ICV is used). **Enable** puts it
+  back to *Active* (or *Expired* when its certificate has expired, or *Registered* if it was never onboarded).
+- **Delete** — removes a device that never issued a document and never received a production certificate.
+  Any other device is **decommissioned** instead: it can never issue again, and its invoices and certificates
+  are kept for the retention period.
 
 **Register device** — pick the company and store, enter name, invoice types (`0100` B2C, `1000` B2B,
 `1100` both), industry and location. Create the company and store first (*Companies & stores*).
@@ -201,9 +209,21 @@ The OTP field is never refilled after an error and the OTP is not kept in the se
 
 ### Companies & stores
 
-Lists every company with its VAT registration and stores. Add a company (name, legal name, VAT number,
-CRN, national address, your own ID) and add stores to it (code, name, your own ID). The same rules as
-[`Zatca::companies()`](./device-import#1-companies-and-stores) apply; adding an existing one changes nothing.
+Two tables: **Companies** (VAT registration, CRN, city, number of stores and devices, status) and
+**Stores** (code, company, your ID, devices, status; filter by company). Add a company (name, legal name,
+VAT number, CRN, national address, your own ID) and add stores (company, code, name, your own ID). The same
+rules as [`Zatca::companies()`](./device-import#1-companies-and-stores) apply; adding an existing one changes nothing.
+
+Each row has **Edit**, **Disable / Enable** and **Delete**:
+
+- **Edit company** — name, Arabic name, legal name, CRN, your ID and national address. The VAT number is in
+  every device certificate and cannot be changed. Changes apply to invoices issued from now on.
+- **Edit store** — code (unique within the company), name and your ID. Onboarded devices keep the old store
+  name in their certificate until it is renewed.
+- **Disable** — every device of the company / store refuses new invoices (`DeviceUnavailable`, HTTP API `503`)
+  until it is enabled again. Retries of invoices already accepted still return their original result.
+- **Delete** — only while no device and no invoice belongs to it (otherwise disable it). Deleting a company
+  also deletes its stores. Adding the same VAT number or store code again brings the deleted record back.
 
 ### Errors & warnings
 

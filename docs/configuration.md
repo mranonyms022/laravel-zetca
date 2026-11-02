@@ -101,7 +101,8 @@ The provider and model are used to build the EGS serial number `1-<provider>|2-<
 | `outbox.lease_seconds` | 600 | A dispatched message whose job has not finished within this time is dispatched again |
 | `outbox.dispatch_on_sync_driver` | `false` | With the `sync` queue driver, messages are left to the relay instead of running inside the request |
 | `performance.advisory_chain_lock` | `false` | Extra cache lock around issuance. Correctness never depends on it |
-| `api.enabled` / `prefix` / `middleware` | `false` / `api/zatca` / `['api']` | Optional HTTP endpoints. Add your own auth middleware |
+| `api.enabled` / `prefix` / `middleware` | `false` / `api/zatca` / `['api']` | Optional HTTP endpoints |
+| `api.auth` / `api.basic.username` / `api.basic.password` | `basic` / – / – | HTTP Basic auth (`ZATCA_API_USERNAME` / `ZATCA_API_PASSWORD`); fails closed while empty. `none` = your middleware authenticates |
 | `b2b.require_buyer_identification` | `true` | Reject B2B invoices without buyer VAT or other buyer ID (BR-KSA-81) before using an ICV |
 
 ## Corrections

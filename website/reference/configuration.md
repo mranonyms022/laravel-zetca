@@ -138,7 +138,10 @@ explicitly; confirm them with ZATCA or your tax advisor.
 |---|---|---|---|
 | `api.enabled` | `ZATCA_API_ENABLED` | `false` | Register the [HTTP API](/guide/http-api) |
 | `api.prefix` | `ZATCA_API_PREFIX` | `api/zatca` | URL prefix |
-| `api.middleware` | | `['api']` | Add your authentication here |
+| `api.middleware` | | `['api']` | Extra middleware for the API routes |
+| `api.auth` | `ZATCA_API_AUTH` | `basic` | `basic`: HTTP Basic with the credentials below (401 for everyone while they are empty). `none`: your `api.middleware` authenticates |
+| `api.basic.username` | `ZATCA_API_USERNAME` | | Basic auth username |
+| `api.basic.password` | `ZATCA_API_PASSWORD` | | Basic auth password (long and random) |
 | `api.batch_max` | | 500 | Reserved: batch endpoint not available yet |
 
 ## Performance

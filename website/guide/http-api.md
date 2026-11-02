@@ -8,19 +8,31 @@ ZATCA_API_ENABLED=true
 ZATCA_API_PREFIX=api/zatca
 ```
 
-::: danger Add authentication
-The routes use only the middleware in `zatca.api.middleware` (default `['api']`). Add your own
-authentication, for example:
+## Authentication
+
+The API uses **HTTP Basic authentication** by default. Set a username and a long random password:
+
+```dotenv
+ZATCA_API_USERNAME=pos
+ZATCA_API_PASSWORD=change-me-to-a-long-random-secret
+```
+
+Every request sends them in the `Authorization` header (`curl -u pos:secret ...`). Wrong or missing
+credentials get `401` with `WWW-Authenticate: Basic`. While no credentials are configured, **every** request
+gets `401`: the API never runs open by accident. Use HTTPS only; Basic auth sends the password with each request.
+
+To use your own authentication instead (Sanctum, Passport, ...), switch the package check off and add your
+middleware:
 
 ```php
 // config/zatca.php
 'api' => [
-    'enabled' => env('ZATCA_API_ENABLED', false),
-    'prefix' => env('ZATCA_API_PREFIX', 'api/zatca'),
     'middleware' => ['api', 'auth:sanctum'],
+    'auth' => 'none',          // or ZATCA_API_AUTH=none
 ],
 ```
 
+::: danger
 Anyone who can call these endpoints can issue legally binding invoices in your company's name.
 :::
 
@@ -57,7 +69,7 @@ workflow (B2C note → reported, B2B note → cleared) and uses the original's d
 ```bash
 # credit note: note payload + reason (KSA-10)
 curl -X POST https://shop.example.com/api/zatca/invoices/01M6E2A3B4C5D6E7F8G9H0J1K2/credit-note \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -u "$ZATCA_API_USERNAME:$ZATCA_API_PASSWORD" -H "Content-Type: application/json" \
   -d '{"invoice_number":"CN-000045","reason":"Item returned","lines":[{"name":"Coffee","quantity":"1","unit_price":"12.50","vat_category":"S","vat_rate":"15"}]}'
 
 # debit note: same shape
@@ -82,7 +94,7 @@ See [Credit and debit notes](./notes) and [Cancelling invoices](./cancellation) 
 
 ```bash
 curl -X POST https://shop.example.com/api/zatca/b2c/invoices \
-  -H "Authorization: Bearer $TOKEN" \
+  -u "$ZATCA_API_USERNAME:$ZATCA_API_PASSWORD" \
   -H "Content-Type: application/json" \
   -H "X-Zatca-Device: 1" \
   -H "Idempotency-Key: ORDER-98765" \
@@ -110,11 +122,12 @@ curl -X POST https://shop.example.com/api/zatca/b2c/invoices \
 | `201` | Invoice created | Print the QR |
 | `200` | Same invoice sent again; original result returned | Treat as success |
 | `400` | Body is not a JSON object | Fix the request |
+| `401` | Missing or wrong Basic credentials (or none configured on the server) | Fix the credentials |
 | `404` | Invoice not found | — |
 | `409` | Same invoice number / key with a different payload (body contains `invoice_id` of the existing invoice), or a note / cancel is not allowed | Use a new number, or look up the existing invoice |
 | `422` | Validation failed (`errors` list), or device header missing | Fix the data |
 | `429` | Too many concurrent requests (`Retry-After: 1`) | Retry after the given seconds, same `Idempotency-Key` |
-| `503` | Queue saturated (`Retry-After: 5`) or device unavailable (`Retry-After: 60`) | Retry later, same `Idempotency-Key` |
+| `503` | Queue saturated (`Retry-After: 5`) or device unavailable, e.g. its company or store is disabled (`Retry-After: 60`) | Retry later, same `Idempotency-Key` |
 
 Always retry with the **same** `Idempotency-Key`: you get the original result and never a second invoice.
 

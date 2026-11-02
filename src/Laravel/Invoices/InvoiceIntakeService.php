@@ -68,6 +68,8 @@ final class InvoiceIntakeService
         if ($existing = $this->existing((int) $device->company_id, $externalId, $payloadHash)) {
             return new IntakeResult($existing, false);
         }
+        // after the idempotent replay: a retry of an already accepted invoice still gets its original result
+        $this->assertOrganisationEnabled($device);
 
         $prepared = $this->preparer->prepare($payload, $workflow, $device);
         $validation = $this->generators->for($workflow)->validate($prepared);
@@ -248,6 +250,21 @@ final class InvoiceIntakeService
         }
 
         return $found;
+    }
+
+    /** A company or store disabled in the dashboard refuses new documents on all its devices. */
+    private function assertOrganisationEnabled(Device $device): void
+    {
+        $company = \CodingTriplets\Zatca\Laravel\Database\Models\Company::query()->withTrashed()->whereKey($device->company_id)->first(['id', 'status', 'deleted_at']);
+        if ($company === null || $company->trashed() || ($company->status ?? 'active') !== 'active') {
+            throw DeviceUnavailable::because((int) $device->id, 'its company is disabled');
+        }
+        if ($device->branch_id !== null) {
+            $store = \CodingTriplets\Zatca\Laravel\Database\Models\Branch::query()->withTrashed()->whereKey($device->branch_id)->first(['id', 'status', 'deleted_at']);
+            if ($store === null || $store->trashed() || ($store->status ?? 'active') !== 'active') {
+                throw DeviceUnavailable::because((int) $device->id, 'its store is disabled');
+            }
+        }
     }
 
     /** @param array<string, mixed> $payload */
