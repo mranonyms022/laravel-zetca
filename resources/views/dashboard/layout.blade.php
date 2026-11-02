@@ -22,6 +22,12 @@
         ['home', [], 'Dashboard', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::DASHBOARD_VIEW, 'home'],
         ['invoices.index', ['workflow' => 'b2b'], 'B2B · Clearance', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::B2B_VIEW, 'b2b'],
         ['invoices.index', ['workflow' => 'b2c'], 'B2C · Reporting', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::B2C_VIEW, 'b2c'],
+        ['devices.index', [], 'Devices', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::DEVICES_VIEW, 'devices'],
+        ['companies.index', [], 'Companies & stores', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::COMPANIES_VIEW, 'companies'],
+        ['errors.index', [], 'Errors & warnings', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::ERRORS_VIEW, 'errors'],
+        ['queue', [], 'Queue monitor', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::QUEUE_VIEW, 'queue'],
+        ['audit', [], 'Audit history', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::AUDIT_VIEW, 'audit'],
+        ['settings', [], 'Settings', \CodingTriplets\Zatca\Laravel\Dashboard\Abilities::SETTINGS_MANAGE, 'settings'],
     ];
     $section = trim($__env->yieldContent('section', 'home'));
 @endphp
@@ -43,7 +49,7 @@
 
     <div class="flex min-w-0 flex-1 flex-col">
         <header class="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 md:px-6 dark:border-slate-800 dark:bg-slate-900">
-            <nav class="flex gap-3 text-sm md:hidden">
+            <nav class="flex gap-3 overflow-x-auto whitespace-nowrap text-sm md:hidden">
                 @foreach ($nav as [$name, $params, $label, $ability, $key])
                     @if ($can($ability))
                         <a href="{{ $zroute($name, $params) }}" class="{{ $section === $key ? 'font-semibold text-emerald-700' : 'text-slate-600' }}">{{ explode(' ', $label)[0] }}</a>

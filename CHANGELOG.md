@@ -5,6 +5,16 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (M7b — dashboard, part 2)
+- Devices: list, detail (certificates without secrets, counter, onboarding and renewal history), register,
+  import from CSV/XLSX/ODS with a check-only mode, onboard / resume / renew with an OTP typed in the browser
+  (never flashed, stored or logged; uploads deleted after reading).
+- Companies & stores: list, add company, add store.
+- Errors, error groups and warnings; mark one error or a whole group resolved with a note
+  (`ErrorResolver`, recounts the invoice and group counters, audited).
+- Queue monitor (outbox, B2B/B2C submissions, B2C deadline breaches), audit history with the tamper-chain
+  check, read-only settings page (whitelisted keys only).
+
 ### Added (M7a — dashboard, part 1)
 - Web dashboard at `/admin/zatca` (Blade, one prebuilt CSS file, no JavaScript): overview, B2B and B2C lists
   (status tabs, search, filters), invoice detail (summary, lines, JSON versions, issuances, submissions,

@@ -279,7 +279,7 @@ final class ZatcaListener implements ShouldQueue
 
 ## Phase 6 — Handle problems (1 day)
 
-Until the M7 dashboard exists, give your accounting team a small admin screen (or use the commands):
+The dashboard (`/admin/zatca`) covers this; if you prefer your own admin screen, or for scripts, use the PHP API or the commands:
 
 | Situation | Action in your admin | Package call |
 |---|---|---|
@@ -415,7 +415,7 @@ Other hosts (Netlify, Vercel, Cloudflare Pages): build command `npm run build`, 
 | Milestone | Content |
 |---|---|
 | M6.1 | Done: discounts, stored lines, source link, cancellation, device import |
-| M7 | Web dashboard: invoice lists and filters, error groups, device management, retry/correct/notes actions, roles |
+| M7 | Web dashboard. M7a (lists, detail, actions, roles) and M7b (devices, companies, errors, queue, audit, settings) done; M7c (correction editor, note forms, charts, reports) next |
 | M8 | Release: benchmarks, PostgreSQL/MySQL/SQL Server CI runs, simulation verification, 1.0 |
 
 Until 1.0, pin a minor version (`^0.6`) and read the changelog before upgrading.

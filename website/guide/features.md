@@ -61,6 +61,8 @@ rule not yet confirmed in official documentation.
 | Multi-company and multi-tenant | tenant resolver | [Multi-company and multi-tenant](./tenancy) |
 | Queues, workers, scheduler | `queue:work`, outbox relay | [Queues and workers](./workers) |
 | Web dashboard: overview, B2B/B2C lists, invoice detail, actions, XML download, permissions | `/admin/zatca`, `Zatca::auth()` | [Dashboard](./dashboard) |
+| Dashboard: devices (register, import from Excel/CSV, onboard and renew with an OTP), companies and stores | `/admin/zatca/devices` | [Dashboard](./dashboard#devices) |
+| Dashboard: errors and error groups (resolve with a note), queue monitor, audit history, settings | `/admin/zatca/errors` | [Dashboard](./dashboard#errors-warnings) |
 | Audit trail of every operator action (hash-chained) | `zatca:audit:verify` | [Security](./security) |
 
 ## Reliability and security
@@ -72,13 +74,12 @@ rule not yet confirmed in official documentation.
 | Lost-message recovery | `zatca:reconcile` — [Monitoring](./monitoring) |
 | Load shedding (`429`/`503`) | [HTTP API](./http-api#load-shedding), [Scaling](./scaling) |
 | Encrypted private keys and secrets, OTPs never stored, redacted logs, TLS verification, XXE protection | [Security](./security) |
-| Laravel 9–13, PHP 8.1+, MySQL/MariaDB/PostgreSQL/SQLite | [Requirements](./requirements), [Compatibility](/reference/compatibility) |
+| Laravel 9–13, PHP 8.1+, MySQL/MariaDB (PostgreSQL and SQL Server not yet) | [Requirements](./requirements), [Compatibility](/reference/compatibility) |
 
 ## Not available yet
 
 | Feature | Planned |
 |---|---|
-| Dashboard: devices and bulk import, errors, queue, audit, settings | M7b |
 | Dashboard: correction editor, note forms, charts, reports and exports | M7c |
 | Batch HTTP endpoint, per-device in-flight limit | later; the config keys exist but are not used yet |
 | Prepaid amounts, currencies other than SAR | later |

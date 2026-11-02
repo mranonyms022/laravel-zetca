@@ -201,6 +201,17 @@ them, see [Dashboard](./dashboard#who-may-do-what)).
 | 12.6 | `php artisan zatca:audit:verify` | Intact; the cancel appears in `zatca_audit_logs` with your user ID |
 | 12.7 | Log in as a user without permissions (with `APP_ENV=production` and a `Zatca::auth()` callback that returns `false`) | `403` |
 | 12.8 | View the page source | No keys, secrets or OTPs |
+| 12.9 | *Companies & stores* → add a company and a store | Green message; the store appears under the company |
+| 12.10 | *Devices* → *Register device* for that store | Device page with status *REGISTERED* and an OTP form |
+| 12.11 | Enter a wrong OTP (`12ab`) | "The OTP has 6 digits."; the field is empty again |
+| 12.12 | Enter OTP `123345` → *Onboard* | Device becomes *ACTIVE*; a compliance certificate and a production certificate are listed |
+| 12.13 | *Devices* → *Import from file*, upload [`devices.csv`](/samples/devices.csv) with *Check only* ticked (adjust company/store IDs to yours) | Report: valid rows and the failing row with its reason; no device created |
+| 12.14 | Upload it again without *Check only* | Report *created* / *failed*; the new devices are in the list. Upload once more → *existing* |
+| 12.15 | *Errors & warnings* (after step 10 there are rejections) | The ZATCA errors, linked to their invoices; *Groups* shows them counted once |
+| 12.16 | *Mark as resolved* with a note | Error disappears from *Open*; the invoice's unresolved count drops |
+| 12.17 | *Queue monitor* with the workers stopped, then issue a B2C invoice | *Pending* goes up; start the workers, reload → back to 0 |
+| 12.18 | *Audit history* → *Verify tamper chain* | "Audit chain intact"; your onboarding, cancel and resolve actions are listed with your user ID |
+| 12.19 | *Settings* | Your configuration; no encryption key or credential anywhere |
 
 ## 13. Security checks
 
