@@ -5,6 +5,8 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-03
+
 ### Changed
 - **HTTP API: HTTP Basic authentication is on by default.** Set `ZATCA_API_USERNAME` and `ZATCA_API_PASSWORD`;
   until both are set every API request gets `401`. Set `ZATCA_API_AUTH=none` to keep authenticating only with your
