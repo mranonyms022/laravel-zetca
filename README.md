@@ -9,6 +9,9 @@ ZATCA Phase 2 (Fatoora) e-invoicing engine and management console for Laravel, b
 
 | Guide | |
 |---|---|
+| [Documentation site](website/) | Full user documentation (VitePress; published to GitHub Pages by `.github/workflows/docs.yml`) |
+| [Implementation guide](docs/IMPLEMENTATION-GUIDE.md) | Step-by-step integration into an application, from sandbox to production |
+| [Technical documentation](docs/TECHNICAL.md) | Internals as built: flows, transactions, concurrency, state machines |
 | [Installation](docs/installation.md) | Requirements, install options (Packagist, VCS, local path), first setup |
 | [Configuration](docs/configuration.md) | Every option in `config/zatca.php` |
 | [User Guide](docs/user-guide.md) | Concepts, what works today, data model, validation helpers, roadmap |
