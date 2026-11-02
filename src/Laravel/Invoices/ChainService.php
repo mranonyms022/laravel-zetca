@@ -15,7 +15,12 @@ use CodingTriplets\Zatca\Core\Domain\Enums\SubmissionStatus;
 use CodingTriplets\Zatca\Core\Domain\Enums\Workflow;
 use CodingTriplets\Zatca\Core\Domain\Exceptions\SequenceException;
 use CodingTriplets\Zatca\Core\Domain\ValueObjects\InvoiceHash;
+use CodingTriplets\Zatca\Core\Events\CustomerCopyReissued;
 use CodingTriplets\Zatca\Core\Events\InvoiceIssued;
+use CodingTriplets\Zatca\Core\Events\InvoiceReissued;
+use CodingTriplets\Zatca\Core\Domain\Enums\ClearanceStatus;
+use CodingTriplets\Zatca\Core\Domain\Enums\ReportingStatus;
+use CodingTriplets\Zatca\Laravel\Database\Models\ZatcaError;
 use CodingTriplets\Zatca\Core\Contracts\Events\EventDispatcher;
 use CodingTriplets\Zatca\Core\Invoice\Shared\Chain\ChainPosition;
 use CodingTriplets\Zatca\Laravel\Database\Models\B2bClearanceSubmission;
@@ -56,6 +61,7 @@ final class ChainService
         private readonly ProcessingLogger $logger,
         private readonly OutboxRecorder $outbox,
         private readonly EventDispatcher $events,
+        private readonly RejectionPolicies $policies = new RejectionPolicies(),
     ) {
     }
 
@@ -97,6 +103,19 @@ final class ChainService
             throw new \LogicException('Invoice device changed during issuance.');
         }
 
+        // Reissue (operation B): only a REJECTED current issuance may be replaced (ARCHITECTURE 3.2). Accepted
+        // documents are changed only through credit/debit notes; transient failures are retried with identical bytes.
+        $previous = null;
+        if ($reason !== IssuanceReason::Initial) {
+            $previous = $invoice->current_issuance_id !== null ? InvoiceIssuance::query()->find($invoice->current_issuance_id) : null;
+            if ($previous === null || $previous->status !== IssuanceStatus::Rejected) {
+                throw OperationNotAllowed::because($invoice, 'only a rejected document can be reissued');
+            }
+            if ($invoice->processing_status !== ProcessingStatus::ReadyForProcessing) {
+                throw OperationNotAllowed::because($invoice, "it is {$invoice->processing_status->value}, not READY_FOR_PROCESSING");
+            }
+        }
+
         $workflow = $invoice->workflow;
         $env = $device->environment;
         /** @var InvoiceCounter $counter */
@@ -110,6 +129,11 @@ final class ChainService
         $payload = $this->preparer->prepare((array) $version->payload, $workflow, $device, (string) $invoice->invoice_number);
         $uuid = (string) Str::uuid();
         $now = new \DateTimeImmutable('now', new \DateTimeZone('Asia/Riyadh'));
+        if ($previous !== null) {
+            $tz = new \DateTimeZone('Asia/Riyadh');
+            $rejectedAt = new \DateTimeImmutable(\Illuminate\Support\Carbon::parse($previous->issue_date)->format('Y-m-d') . ' ' . $previous->issue_time, $tz);
+            $payload['issued_at'] = $this->policies->for($workflow)->issueDate($rejectedAt, $now)->format('Y-m-d\TH:i:s');
+        }
 
         // Throws InvoiceValidationException / CredentialException → rollback, ICV not consumed.
         $generated = $this->generators->for($workflow)->generate($payload, new ChainPosition($icv, $pih), $uuid, $signing['signing'], $now);
@@ -182,6 +206,14 @@ final class ChainService
 
         $submission = $this->createSubmission($invoice, $issuance, $workflow, $now);
 
+        if ($previous !== null) {
+            $previous->forceFill(['status' => IssuanceStatus::Superseded])->save();
+            $this->resolveErrorsOf($invoice, (int) $previous->id, (int) $issuance->id, $actorId);
+            $invoice->forceFill($workflow === Workflow::B2B
+                ? ['clearance_status' => ClearanceStatus::Pending, 'zatca_response_status' => null, 'attempts' => 0]
+                : ['reporting_status' => ReportingStatus::Pending, 'zatca_response_status' => null, 'attempts' => 0]);
+        }
+
         $invoice->forceFill([
             'current_issuance_id' => $issuance->id,
             'issuance_count' => (int) $invoice->issuance_count + 1,
@@ -222,8 +254,25 @@ final class ChainService
 
         $event = new InvoiceIssued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, $workflow->value, $icv, $generated->uuid);
         $this->events->dispatchAfterCommit($event);
+        if ($previous !== null) {
+            $this->events->dispatchAfterCommit(new InvoiceReissued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, (int) $previous->id, $workflow->value, $reason->value, $icv, $generated->uuid, $actorId));
+            if ($workflow === Workflow::B2C) {
+                $this->events->dispatchAfterCommit(new CustomerCopyReissued((int) $invoice->id, (string) $invoice->public_id, (int) $issuance->id, $generated->qrCode()));
+            }
+        }
 
         return $issuance;
+    }
+
+    /** Errors of the superseded issuance are resolved by the reissue (they stay in history). */
+    private function resolveErrorsOf(Invoice $invoice, int $previousIssuanceId, int $newIssuanceId, ?int $actorId): void
+    {
+        ZatcaError::query()->withoutGlobalScopes()
+            ->where('invoice_id', $invoice->id)
+            ->where('issuance_id', $previousIssuanceId)
+            ->where('is_resolved', false)
+            ->update(['is_resolved' => true, 'resolved_at' => now(), 'resolved_by' => $actorId, 'resolution_note' => "Superseded by issuance #{$newIssuanceId}"]);
+        $invoice->unresolved_error_count = ZatcaError::query()->withoutGlobalScopes()->where('invoice_id', $invoice->id)->where('is_resolved', false)->count();
     }
 
     private function createSubmission(Invoice $invoice, InvoiceIssuance $issuance, Workflow $workflow, \DateTimeImmutable $now): B2bClearanceSubmission|B2cReportingSubmission

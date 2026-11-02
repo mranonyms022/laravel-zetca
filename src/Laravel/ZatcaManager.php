@@ -11,7 +11,7 @@ use CodingTriplets\Zatca\Core\Domain\Enums\Environment;
  */
 final class ZatcaManager
 {
-    public const VERSION = '0.4.0-dev';
+    public const VERSION = '0.5.0-dev';
 
     /** @var (\Closure(mixed $user, string $ability): bool)|null */
     private ?\Closure $authCallback = null;
@@ -36,6 +36,12 @@ final class ZatcaManager
     public function b2b(): \CodingTriplets\Zatca\Laravel\Invoices\InvoiceIssuer
     {
         return app('zatca.b2b');
+    }
+
+    /** Retry, correct, reissue, approve, credit/debit notes (operations A, B, C). */
+    public function invoices(): \CodingTriplets\Zatca\Laravel\Invoices\InvoiceOperations
+    {
+        return app(\CodingTriplets\Zatca\Laravel\Invoices\InvoiceOperations::class);
     }
 
     /** Registers the console authorization callback (Horizon-style). */

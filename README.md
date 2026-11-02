@@ -2,7 +2,7 @@
 
 ZATCA Phase 2 (Fatoora) e-invoicing engine and management console for Laravel, by CodingTriplets Technologies.
 
-> **Status: under development (milestone M5 done: issuing, B2C reporting and B2B clearance through queues, verified in ZATCA's developer sandbox).** Corrections, credit/debit note operations and the dashboard follow in M6–M7. Not for production before 1.0.
+> **Status: under development (milestone M6 done: issuing, B2C reporting, B2B clearance, corrections and credit/debit notes, verified in ZATCA's developer sandbox).** The dashboard follows in M7. Not for production before 1.0.
 > Architecture and design decisions: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), which is the source of truth.
 
 ## Documentation

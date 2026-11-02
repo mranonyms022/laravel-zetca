@@ -104,7 +104,7 @@ The provider and model are used to build the EGS serial number `1-<provider>|2-<
 | `api.enabled` / `prefix` / `middleware` | `false` / `api/zatca` / `['api']` | Optional HTTP endpoints. Add your own auth middleware |
 | `b2b.require_buyer_identification` | `true` | Reject B2B invoices without buyer VAT or other buyer ID (BR-KSA-81) before using an ICV |
 
-## Corrections **(future)**
+## Corrections
 
 Defaults for rejected-invoice handling. Some are pending official ZATCA confirmation
 (see ARCHITECTURE §3 and §22).

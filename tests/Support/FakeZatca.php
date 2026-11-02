@@ -113,6 +113,12 @@ final class FakeZatca
         return $this->submissionResult(400, 'NOT_REPORTED', null, $errors);
     }
 
+    /** @param list<array{code: string, message: string}> $errors */
+    public function notCleared(array $errors = [['code' => 'BR-KSA-08', 'message' => 'Invalid buyer identification']]): self
+    {
+        return $this->submissionResult(400, null, 'NOT_CLEARED', $errors);
+    }
+
     private function submissionResult(int $status, ?string $reporting, ?string $clearance, array $errors, array $warnings = [], ?string $cleared = null): self
     {
         $map = static fn (array $items, string $type) => array_map(static fn ($i) => ['type' => $type, 'code' => $i['code'], 'category' => 'BR', 'message' => $i['message'], 'status' => $type], $items);

@@ -50,7 +50,7 @@ final class InvoiceIntakeService
 
     /**
      * @param array<string, mixed> $payload
-     * @param array{device?: int|string|Device, external_id?: string, actor_id?: ?int, queue_processing?: bool} $options
+     * @param array{device?: int|string|Device, external_id?: string, actor_id?: ?int, queue_processing?: bool, billing_reference_invoice_id?: int} $options
      */
     public function receive(Workflow $workflow, array $payload, array $options = []): IntakeResult
     {
@@ -136,6 +136,7 @@ final class InvoiceIntakeService
             'clearance_status' => $workflow === Workflow::B2B ? ClearanceStatus::Pending : ClearanceStatus::NotApplicable,
             'warning_count' => count($validation->warnings()),
             'created_by' => $options['actor_id'] ?? null,
+            'billing_reference_invoice_id' => $options['billing_reference_invoice_id'] ?? null,
             'status_changed_at' => now(),
         ]);
         $invoice->save();

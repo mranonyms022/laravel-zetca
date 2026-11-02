@@ -181,6 +181,9 @@ final class ZatcaServiceProvider extends ServiceProvider
                 Console\VerifyChainCommand::class,
                 Console\OutboxRelayCommand::class,
                 Console\OutboxPruneCommand::class,
+                Console\CheckDeadlinesCommand::class,
+                Console\ReconcileCommand::class,
+                Console\InvoiceActionCommand::class,
             ]);
 
             if (config('zatca.outbox.schedule', true)) {
@@ -188,6 +191,8 @@ final class ZatcaServiceProvider extends ServiceProvider
                     $schedule->command('zatca:outbox:relay')->everyMinute()->withoutOverlapping()->onOneServer();
                     $schedule->command('zatca:outbox:prune')->dailyAt('03:30')->withoutOverlapping()->onOneServer();
                     $schedule->command('zatca:chain:verify')->dailyAt('02:45')->withoutOverlapping()->onOneServer();
+                    $schedule->command('zatca:deadlines:check')->everyTenMinutes()->withoutOverlapping()->onOneServer();
+                    $schedule->command('zatca:reconcile')->everyFifteenMinutes()->withoutOverlapping()->onOneServer();
                 });
             }
 

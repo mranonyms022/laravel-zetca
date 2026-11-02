@@ -114,6 +114,8 @@ return [
     'b2c' => [
         // Reporting window after issuance (hours): "within 24 hours" (Detailed Guidelines v1.0 6.5).
         'reporting_deadline_hours' => 24,
+        // InvoiceReportingDeadlineAtRisk fires once per threshold (hours left) for documents not yet reported.
+        'deadline_alert_hours' => [4, 1],
         // queue: issue + return QR/counter immediately, report on the zatca-b2c-reporting queue.
         // sync:  also report to ZATCA inside the request (slower; low volume only).
         'reporting_mode' => env('ZATCA_B2C_REPORTING_MODE', 'queue'),
@@ -146,6 +148,9 @@ return [
     'b2b' => [
         // BR-KSA-81 is a warning in ZATCA; the package rejects locally by default before any ICV is used.
         'require_buyer_identification' => true,
+        // ZATCA answers 303 when clearance is switched off: "report" the same signed document through the
+        // reporting API, or "manual_review" (an operator retries, which then reports). ⚠ Pending Q-Z8.
+        'on_clearance_deactivated' => 'report',
     ],
 
     'correction' => [

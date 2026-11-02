@@ -53,6 +53,9 @@ use Illuminate\Support\Str;
  */
 final class SubmissionRunner
 {
+    /** `clearance_status_raw` marker: ZATCA answered 303, the B2B document is reported instead ⚠ */
+    public const CLEARANCE_DEACTIVATED = 'CLEARANCE_DEACTIVATED';
+
     private const CLAIMABLE = ['pending', 'unknown'];
 
     private const FINAL = ['reported', 'reported_with_warnings', 'not_reported', 'cleared', 'cleared_with_warnings', 'not_cleared', 'failed', 'clearance_deactivated'];
@@ -89,6 +92,7 @@ final class SubmissionRunner
         }
         $device = Device::query()->withoutGlobalScopes()->findOrFail($issuance->device_id);
         $environment = $device->environment;
+        $viaReporting = $submission instanceof B2bClearanceSubmission && $submission->clearance_status_raw === self::CLEARANCE_DEACTIVATED;
 
         // Backpressure: open circuit, paused device, rate limit → try later, without using an attempt.
         $wait = $this->circuit->retryAfter("env:{$environment->value}");
@@ -106,7 +110,7 @@ final class SubmissionRunner
 
         // T3: claim.
         $token = (string) Str::uuid();
-        $attempt = $this->transactions->run(function () use ($model, $submission, $token, $workflow, $invoice, $issuance, $environment, $manual): ?SubmissionAttempt {
+        $attempt = $this->transactions->run(function () use ($model, $submission, $token, $workflow, $invoice, $issuance, $environment, $manual, $viaReporting): ?SubmissionAttempt {
             $now = now();
             $claimed = $model::query()->whereKey($submission->id)
                 ->where(static fn ($q) => $q->whereIn('status', self::CLAIMABLE)
@@ -138,9 +142,9 @@ final class SubmissionRunner
                 'invoice_id' => $invoice->id,
                 'issuance_id' => $issuance->id,
                 'attempt_number' => $attemptNumber,
-                'endpoint' => SubmissionGateway::endpoint($workflow),
+                'endpoint' => SubmissionGateway::endpoint($workflow, $viaReporting),
                 'environment' => $environment->value,
-                'request_headers' => ['Accept-Version' => 'V2', 'Clearance-Status' => $workflow === Workflow::B2B ? '1' : '0', 'Authorization' => '[redacted]'],
+                'request_headers' => ['Accept-Version' => 'V2', 'Clearance-Status' => $workflow === Workflow::B2B && ! $viaReporting ? '1' : '0', 'Authorization' => '[redacted]'],
                 'request_body' => ['invoiceHash' => $issuance->invoice_hash, 'uuid' => $issuance->uuid, 'invoice' => '[signed XML artifact]'],
                 'started_at' => $now,
                 'triggered_by' => $manual ? 'manual' : 'system',
@@ -158,14 +162,15 @@ final class SubmissionRunner
         $failure = null;
         try {
             $xml = $this->signedXml($issuance);
-            $result = $this->gateway->submit($workflow, $environment, $xml, (string) $issuance->invoice_hash, (string) $issuance->uuid, $this->credentials->submission($device));
-        } catch (FatooraApiException|DeviceUnavailable|\CodingTriplets\Zatca\Core\Domain\Exceptions\ZatcaException $e) {
+            $result = $this->gateway->submit($workflow, $environment, $xml, (string) $issuance->invoice_hash, (string) $issuance->uuid, $this->credentials->submission($device), $viaReporting);
+        } catch (\Throwable $e) {
+            // Never leave the claim hanging: every failure is turned into a recorded outcome below.
             $failure = $e;
         }
         $durationMs = (int) round((microtime(true) - $started) * 1000);
 
         // T4: outcome, fenced by the claim token.
-        return $this->record($workflow, $model, (int) $submission->id, $token, $attempt, $invoice, $issuance, $device, $result, $failure, $durationMs);
+        return $this->record($workflow, $model, (int) $submission->id, $token, $attempt, $invoice, $issuance, $device, $result, $failure, $durationMs, $viaReporting);
     }
 
     /**
@@ -183,9 +188,15 @@ final class SubmissionRunner
         ?InvoiceSubmissionResult $result,
         ?\Throwable $failure,
         int $durationMs,
+        bool $viaReporting = false,
     ): string {
         $env = "env:{$device->environment->value}";
         $outcome = $this->classify($result, $failure);
+        $status303 = $result?->httpStatus === 303 || ($failure instanceof FatooraApiException && $failure->httpStatus === 303);
+        if ($workflow === Workflow::B2B && ! $viaReporting && $status303) {
+            $outcome = AttemptOutcome::ClearanceDeactivated;
+        }
+        $cleared = $workflow === Workflow::B2B && ! $viaReporting;   // false: the reporting endpoint was used
         if (in_array($outcome, [AttemptOutcome::Transient, AttemptOutcome::Unknown], true) && $failure instanceof FatooraApiException && $failure->httpStatus === null) {
             $this->circuit->failure($env);
         } elseif ($result !== null) {
@@ -193,7 +204,7 @@ final class SubmissionRunner
         }
 
         $events = [];
-        $status = $this->transactions->run(function () use ($workflow, $model, $submissionId, $token, $attempt, $invoice, $issuance, $device, $result, $failure, $durationMs, $outcome, &$events): string {
+        $status = $this->transactions->run(function () use ($workflow, $model, $submissionId, $token, $attempt, $invoice, $issuance, $device, $result, $failure, $durationMs, $outcome, $cleared, &$events): string {
             /** @var B2bClearanceSubmission|B2cReportingSubmission $submission */
             $submission = $model::query()->whereKey($submissionId)->lockForUpdate()->firstOrFail();
             $attempt->forceFill([
@@ -221,9 +232,9 @@ final class SubmissionRunner
                 case AttemptOutcome::AcceptedWithWarnings:
                     assert($result !== null);
                     $warnings = $outcome === AttemptOutcome::AcceptedWithWarnings;
-                    $raw = $workflow === Workflow::B2B ? ($warnings ? 'cleared_with_warnings' : 'cleared') : ($warnings ? 'reported_with_warnings' : 'reported');
+                    $raw = $cleared ? ($warnings ? 'cleared_with_warnings' : 'cleared') : ($warnings ? 'reported_with_warnings' : 'reported');
                     $fields = ['status' => $raw, 'completed_at' => now(), 'claimed_until' => null];
-                    if ($workflow === Workflow::B2B) {
+                    if ($cleared) {
                         $fields['clearance_status_raw'] = $result->clearanceStatus;
                         if ($result->clearedInvoice !== null) {
                             $fields['cleared_artifact_id'] = $this->storeCleared($locked, $issuance, $result->clearedInvoice);
@@ -235,7 +246,9 @@ final class SubmissionRunner
                             'clearance_status' => $warnings ? ClearanceStatus::ClearedWithWarnings : ClearanceStatus::Cleared,
                         ], 'cleared', issuanceId: (int) $issuance->id);
                     } else {
-                        $fields['reporting_status_raw'] = $result->reportingStatus;
+                        if ($workflow === Workflow::B2C) {
+                            $fields['reporting_status_raw'] = $result->reportingStatus;
+                        }
                         $locked->reported_at = now();
                         $this->logger->transition($locked, [
                             'processing_status' => ProcessingStatus::Reported,
@@ -253,15 +266,15 @@ final class SubmissionRunner
 
                 case AttemptOutcome::Rejected:
                     assert($result !== null);
-                    $raw = $workflow === Workflow::B2B ? 'not_cleared' : 'not_reported';
+                    $raw = $cleared ? 'not_cleared' : 'not_reported';
                     $submission->forceFill([
                         'status' => $raw,
                         'completed_at' => now(),
                         'claimed_until' => null,
-                    ] + ($workflow === Workflow::B2B ? ['clearance_status_raw' => $result->clearanceStatus] : ['reporting_status_raw' => $result->reportingStatus]))->save();
+                    ] + ($cleared ? ['clearance_status_raw' => $result->clearanceStatus] : ($workflow === Workflow::B2C ? ['reporting_status_raw' => $result->reportingStatus] : [])))->save();
                     $issuance->forceFill(['status' => IssuanceStatus::Rejected])->save();
                     $this->logger->transition($locked, ['processing_status' => ProcessingStatus::Rejected, 'submission_status' => SubmissionStatus::Delivered]
-                        + ($workflow === Workflow::B2B ? ['clearance_status' => ClearanceStatus::NotCleared] : ['reporting_status' => ReportingStatus::NotReported]), 'rejected', issuanceId: (int) $issuance->id);
+                        + ($cleared ? ['clearance_status' => ClearanceStatus::NotCleared] : ['reporting_status' => ReportingStatus::NotReported]), 'rejected', issuanceId: (int) $issuance->id);
                     foreach ($result->errors ?: [['code' => 'REJECTED', 'category' => '', 'message' => 'ZATCA rejected the document without error details.']] as $error) {
                         $this->errors->record(ErrorCategory::ZatcaRejection, Severity::Error, $error['code'] ?: null, $error['message'], "zatca.{$workflow->value}", $context + ['details' => ['category' => $error['category']]]);
                     }
@@ -269,6 +282,33 @@ final class SubmissionRunner
                     $locked->zatca_response_status = $result->reportingStatus ?? $result->clearanceStatus ?? $result->validationStatus;
                     $locked->next_retry_at = null;
                     $events[] = new InvoiceRejected((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, $raw);
+                    break;
+
+                case AttemptOutcome::ClearanceDeactivated:
+                    // ZATCA switched clearance off: the same signed standard document is reported instead ⚠.
+                    $report = config('zatca.b2b.on_clearance_deactivated', 'report') === 'report';
+                    $submission->forceFill([
+                        'status' => $report ? 'pending' : 'failed',
+                        'clearance_status_raw' => self::CLEARANCE_DEACTIVATED,
+                        'claimed_until' => null,
+                    ])->save();
+                    $this->logger->transition($locked, [
+                        'processing_status' => $report ? ProcessingStatus::Queued : ProcessingStatus::ManualReview,
+                        'submission_status' => $report ? SubmissionStatus::Pending : SubmissionStatus::FailedPermanent,
+                        'clearance_status' => ClearanceStatus::ClearanceDeactivated,
+                        'reporting_status' => ReportingStatus::Pending,
+                    ], 'clearance_deactivated', $report ? 'ZATCA answered 303: reporting the document instead' : 'ZATCA answered 303: waiting for a manual retry (reporting)', (int) $issuance->id);
+                    Warning::query()->create([
+                        'tenant_id' => (string) $locked->tenant_id, 'invoice_id' => $locked->id, 'issuance_id' => $issuance->id,
+                        'workflow' => $workflow, 'source' => 'zatca', 'code' => 'CLEARANCE_DEACTIVATED',
+                        'message' => 'ZATCA answered 303 (clearance switched off); the standard invoice is reported instead.',
+                    ]);
+                    $locked->warning_count = (int) $locked->warning_count + 1;
+                    $locked->next_retry_at = null;
+                    if ($report) {
+                        $this->outbox->record('submission', (int) $submission->id, OutboxRecorder::EVENT_SUBMIT, QueueNames::submission($workflow), "submit:{$issuance->uuid}:report", ['workflow' => $workflow->value], tenantId: (string) $locked->tenant_id);
+                    }
+                    $events[] = new \CodingTriplets\Zatca\Core\Events\ClearanceDeactivated((int) $locked->id, (string) $locked->public_id, (int) $issuance->id);
                     break;
 
                 case AttemptOutcome::Transient:
@@ -336,7 +376,7 @@ final class SubmissionRunner
                 return AttemptOutcome::Rejected;
             }
 
-            return AttemptOutcome::ClientError;   // e.g. 303 clearance switched off: needs a decision (M6)
+            return AttemptOutcome::ClientError;   // 303 for B2B is mapped to ClearanceDeactivated by the caller
         }
 
         if ($failure instanceof FatooraApiException) {
@@ -356,7 +396,13 @@ final class SubmissionRunner
             return AttemptOutcome::ClientError;
         }
 
-        return $failure instanceof DeviceUnavailable ? AttemptOutcome::Auth : AttemptOutcome::ClientError;
+        if ($failure instanceof DeviceUnavailable) {
+            return AttemptOutcome::Auth;
+        }
+
+        // Unexpected error (not raised by the package): the request may or may not have reached ZATCA.
+        // Treated as an unknown outcome, which resends the identical document.
+        return $failure instanceof \CodingTriplets\Zatca\Core\Domain\Exceptions\ZatcaException ? AttemptOutcome::ClientError : AttemptOutcome::Unknown;
     }
 
     private function signedXml(InvoiceIssuance $issuance): string

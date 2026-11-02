@@ -39,8 +39,16 @@ final class InvoiceIssuer
         $intake = $this->intake->receive($this->workflow, $payload, $options);
         $invoice = $intake->invoice;
 
-        if (! $intake->created || ($intake->validation !== null && ! $intake->validation->isValid())) {
-            return IssueResult::fromInvoice($invoice, ! $intake->created);
+        if ($intake->validation !== null && ! $intake->validation->isValid()) {
+            return IssueResult::fromInvoice($invoice, false);
+        }
+        // A replay returns the original result, except when the first call stopped before the document was
+        // issued (e.g. the process died): then issuance is completed now, still at most once.
+        $resume = ! $intake->created && $invoice->current_issuance_id === null
+            && $invoice->processing_status === \CodingTriplets\Zatca\Core\Domain\Enums\ProcessingStatus::ReadyForProcessing
+            && ! $invoice->requires_approval;
+        if (! $intake->created && ! $resume) {
+            return IssueResult::fromInvoice($invoice, true);
         }
 
         $sync = $this->workflow === Workflow::B2C && config('zatca.b2c.reporting_mode', 'queue') === 'sync';

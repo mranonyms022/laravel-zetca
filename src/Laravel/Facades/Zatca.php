@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static ZatcaManager auth(\Closure $callback)
  * @method static \CodingTriplets\Zatca\Laravel\Invoices\InvoiceIssuer b2c()
  * @method static \CodingTriplets\Zatca\Laravel\Invoices\InvoiceIssuer b2b()
+ * @method static \CodingTriplets\Zatca\Laravel\Invoices\InvoiceOperations invoices()
  *
  * @see ZatcaManager
  */

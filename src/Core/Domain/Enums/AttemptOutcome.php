@@ -14,4 +14,6 @@ enum AttemptOutcome: string
     case Auth = 'auth';
     case Unknown = 'unknown';
     case ClientError = 'client_error';
+    /** B2B: 303, clearance switched off by ZATCA ⚠ */
+    case ClearanceDeactivated = 'clearance_deactivated';
 }

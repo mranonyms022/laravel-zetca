@@ -397,9 +397,9 @@ try {
 | M3 Devices | Encrypted key vault, CSR generation, onboarding (compliance CSID → compliance checks → production CSID), renewal, expiry alerts, audit trail | **Done** |
 | M4 Invoice engine | B2B and B2C XML generation, hashing, signing, QR, compliance checks, validated against ZATCA's SDK | **Done (0.3.0-dev)** |
 | M5 Processing | Atomic ICV/PIH issuing, immutable XML storage, outbox, queues, retries, circuit breaker, error engine, B2C reporting and B2B clearance, HTTP API | **Done (0.4.0-dev)** |
-| M6 ZATCA workflows | Correct-and-reprocess, credit/debit note operations, 303 handling, reconciliation, deadline monitoring | Next |
-| M7 Dashboard | `/admin/zatca` console: dashboards, B2B/B2C lists, JSON correction editor, devices, errors, logs, reports, permissions | Planned |
+| M6 ZATCA workflows | Retry, correct-and-reprocess, reissue, four-eyes approval, credit/debit notes, 303 handling, reconciliation, deadline monitoring | **Done (0.5.0-dev)** |
+| M7 Dashboard | `/admin/zatca` console: dashboards, B2B/B2C lists, JSON correction editor, devices, errors, logs, reports, permissions | Next |
 | M8 Release | Performance testing, security review, full documentation, 1.0.0 | Planned |
 
-Issuing, reporting and clearance work end to end in the ZATCA developer sandbox. Corrections of rejected
-invoices, credit/debit note operations and the dashboard follow in M6–M7. Do not use in production before 1.0.
+Issuing, reporting, clearance, corrections and credit/debit notes work end to end in the ZATCA developer
+sandbox. The dashboard follows in M7. Do not use in production before 1.0.

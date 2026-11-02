@@ -18,17 +18,18 @@ final class SubmissionGateway
     }
 
     /** @throws \CodingTriplets\Zatca\Core\Domain\Exceptions\FatooraApiException */
-    public function submit(Workflow $workflow, Environment $environment, string $signedXml, string $hash, string $uuid, CsidCredentials $credentials): InvoiceSubmissionResult
+    public function submit(Workflow $workflow, Environment $environment, string $signedXml, string $hash, string $uuid, CsidCredentials $credentials, bool $viaReporting = false): InvoiceSubmissionResult
     {
         $client = $this->clients->for($environment);
 
-        return $workflow === Workflow::B2B
+        // A B2B document goes to reporting only after ZATCA answered 303 (clearance switched off) ⚠.
+        return $workflow === Workflow::B2B && ! $viaReporting
             ? $client->clearInvoice($signedXml, $hash, $uuid, $credentials)
             : $client->reportInvoice($signedXml, $hash, $uuid, $credentials);
     }
 
-    public static function endpoint(Workflow $workflow): string
+    public static function endpoint(Workflow $workflow, bool $viaReporting = false): string
     {
-        return $workflow === Workflow::B2B ? '/invoices/clearance/single' : '/invoices/reporting/single';
+        return $workflow === Workflow::B2B && ! $viaReporting ? '/invoices/clearance/single' : '/invoices/reporting/single';
     }
 }

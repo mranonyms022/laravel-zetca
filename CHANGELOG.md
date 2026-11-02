@@ -5,6 +5,39 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0-alpha.1] - not yet tagged
+
+### Added
+- B2B and B2C workflows (milestone M6), through `Zatca::invoices()` and `php artisan zatca:invoice`:
+  - **Retry** (operation A): resends the byte-identical signed document after transient failures, an
+    unknown outcome or exhausted attempts. Refused for accepted or rejected documents.
+  - **Correct & reprocess** (operation B): a new JSON version (reason and changed fields recorded, original
+    kept) on the same invoice record. A rejected document is replaced by a new issuance (new UUID, next ICV,
+    PIH = chain head); the rejected one stays in the chain as `superseded` and its errors are resolved.
+    Invalid corrections save nothing. Pre-issuance (validation failed) invoices can be corrected too.
+  - **Reissue unchanged** for rejections caused by the package or a certificate.
+  - **Four-eyes approval** (`correction.four_eyes`): the approver must differ from the corrector.
+  - **Credit and debit notes** (operation C): only for accepted invoices, same workflow, linked to the
+    original (`billing_reference_invoice_id`, `BillingReference`), mandatory reason.
+  - Rejected-invoice policies per workflow (`ClearanceRejectionPolicy`, `ReportingRejectionPolicy`):
+    B2C keeps the invoice number and issue date, B2B uses the reissue time ⚠ (configurable).
+  - **303 clearance switched off**: the same signed standard invoice is reported instead
+    (`b2b.on_clearance_deactivated = report|manual_review`) ⚠.
+  - **Reporting deadline monitor** (`zatca:deadlines:check`, every 10 minutes): at-risk alerts per threshold,
+    breach flag and CRITICAL error.
+  - **Reconciler** (`zatca:reconcile`, every 15 minutes): re-queues submissions and B2B generations whose
+    outbox message was lost.
+  - Events: `InvoiceReissued`, `CustomerCopyReissued`, `InvoiceReportingDeadlineAtRisk`,
+    `InvoiceReportingDeadlineBreached`, `ClearanceDeactivated`.
+- 135 tests passing on Laravel 9-13; integration suite passing on MariaDB 10.6.
+- Verified live (2026-11-02): corrected B2C invoice reported after a (simulated) rejection, with the PIH
+  chained to the rejected document; B2C credit note reported; B2B invoice and debit note cleared.
+
+### Fixed
+- An unexpected exception during a submission no longer leaves the claim in flight until the lease expires;
+  it is recorded as an unknown outcome and the identical document is resent.
+- A replayed `issue()` completes an invoice whose first call stopped between intake and issuance.
+
 ## [0.4.0-alpha.1] - not yet tagged
 
 ### Added
