@@ -36,14 +36,14 @@ Compatibility is claimed only for combinations that pass CI ([`.github/workflows
 
 | Laravel | PHP | Status |
 |---|---|---|
-| 9.x | 8.1 – 8.2 | Targeted (framework EOL: no upstream security fixes) |
+| 9.52+ | 8.1 – 8.2 | Supported (framework EOL: no upstream security fixes) |
 | 10.x | 8.1 – 8.3 | Targeted (framework EOL) |
 | 11.x | 8.2 – 8.4 | Targeted (framework EOL) |
 | 12.x | 8.2 – 8.4 | Targeted |
 | 13.x | 8.3 – 8.4 | Targeted |
 | 14.x | — | Not released; added once stable and green in CI |
 
-Supported databases: MySQL 8.0+ and MariaDB 10.6+. PostgreSQL and SQL Server are planned but their test runs do not pass yet. SQLite is for development and tests only.
+Supported databases: MySQL 8.0+, MariaDB 10.6+ and PostgreSQL 13+. SQL Server is planned but its test run does not pass yet. SQLite is for development and tests only.
 
 ## Installation (development)
 

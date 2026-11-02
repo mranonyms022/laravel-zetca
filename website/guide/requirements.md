@@ -2,10 +2,10 @@
 
 | Item | Requirement |
 |---|---|
-| Laravel | 9.x, 10.x, 11.x, 12.x or 13.x |
+| Laravel | 9.52+, 10.x, 11.x, 12.x or 13.x |
 | PHP | 8.1 or newer, as supported by your Laravel version (L9: 8.1–8.2, L10: 8.1–8.3, L11/L12: 8.2–8.4, L13: 8.3–8.4) |
 | PHP extensions | `openssl`, `dom`, `libxml`, `mbstring`, `json`, and the PDO driver of your database |
-| Database | MySQL 8.0+ or MariaDB 10.6+ (PostgreSQL and SQL Server: not yet, see [Compatibility](/reference/compatibility)) |
+| Database | MySQL 8.0+, MariaDB 10.6+ or PostgreSQL 13+ (SQL Server: not yet, see [Compatibility](/reference/compatibility)) |
 | Queue | Any Laravel queue driver except `sync` in production (Redis, database, SQS, …) |
 | Cache | A shared cache store (Redis recommended) when you run more than one server or worker |
 | Storage | A **private** filesystem disk for signed XML. Use a shared disk (S3 or similar) with several app servers |

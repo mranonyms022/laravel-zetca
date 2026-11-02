@@ -4,13 +4,18 @@ Only combinations that pass the automated test suite are listed as tested.
 
 ## Laravel and PHP
 
+Every combination below runs the full suite (185 tests) in GitHub Actions, both with the newest and with
+the oldest allowed versions of every dependency.
+
 | Laravel | PHP | Result |
 |---|---|---|
-| 9.x | 8.1, 8.2 | ✅ 173 tests pass (PHP 8.1, local) ⚠ end-of-life |
-| 10.x | 8.1 – 8.3 | ✅ 173 tests pass (PHP 8.2, local) ⚠ end-of-life |
-| 11.x | 8.2 – 8.4 | ✅ 173 tests pass (PHP 8.2, local) ⚠ end-of-life |
-| 12.x | 8.2 – 8.4 | ✅ 173 tests pass; CI green on PHP 8.2, 8.3, 8.4 (lowest and stable dependencies) |
-| 13.x | 8.3, 8.4 | ✅ 173 tests pass; CI green on PHP 8.3, 8.4 (lowest and stable dependencies) |
+| 9.52 (final 9.x release) | 8.1, 8.2 | ✅ CI green ⚠ end-of-life |
+| 10.x | 8.1 – 8.3 | ✅ CI green ⚠ end-of-life |
+| 11.x | 8.2 – 8.4 | ✅ CI green ⚠ end-of-life |
+| 12.x | 8.2 – 8.4 | ✅ CI green |
+| 13.x | 8.3, 8.4 | ✅ CI green |
+
+Laravel 9 releases before 9.52 are not supported (they lack APIs the package and its tests rely on).
 
 ::: warning Laravel 9, 10 and 11 are end-of-life
 They no longer receive security fixes, and every release has open security advisories. Composer 2.9+
@@ -25,8 +30,8 @@ on them, but use Laravel 12 or 13 for new projects and plan the upgrade for exis
 | SQLite | ✅ Full suite (development and tests only) |
 | MariaDB 10.x / 11.x | ✅ Full integration suite, locally and in CI, including concurrent issuance from 6 processes |
 | MySQL 8 | ✅ Full suite on MySQL 8.3 (local) and 8.4 (CI) |
-| PostgreSQL 13+ | ❌ The CI run on PostgreSQL 16 fails; being fixed. Do not use yet |
-| SQL Server 2019+ | ❌ The CI run on SQL Server 2022 fails; being fixed. Do not use yet |
+| PostgreSQL 16 | ✅ Full suite in CI |
+| SQL Server 2022 | ❌ The CI run fails; being fixed. Do not use yet |
 
 ## ZATCA environments
 
