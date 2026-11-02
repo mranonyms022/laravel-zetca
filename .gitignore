@@ -6,3 +6,6 @@ composer.lock
 .env
 *.pem
 *.key
+
+# Test-only key/certificate fixtures must be committed
+!tests/Fixtures/**/*.pem

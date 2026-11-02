@@ -42,6 +42,8 @@ return [
     'security' => [
         // Dedicated master key for credential envelopes. Falls back to APP_KEY with a boot warning.
         'encryption_key' => env('ZATCA_ENCRYPTION_KEY'),
+        // Old master keys still needed to decrypt existing envelopes after a key rotation.
+        'previous_encryption_keys' => array_filter(explode(',', (string) env('ZATCA_PREVIOUS_ENCRYPTION_KEYS', ''))),
         // Class implementing Core\Contracts\Security\KeyManagementService (null = local key).
         'kms' => null,
         'verify_tls' => env('ZATCA_VERIFY_TLS', true),
@@ -53,6 +55,9 @@ return [
         'curve' => 'secp256k1',
         'solution_provider' => env('ZATCA_SOLUTION_PROVIDER', 'CodingTriplets'),
         'solution_model' => env('ZATCA_SOLUTION_MODEL', 'laravel-zatca'),
+        // Attribute for the EGS serial in the CSR SAN: "surname" (2.5.4.4, what OpenSSL's "SN" means and
+        // what ZATCA has accepted from OpenSSL-based integrations) or "serialNumber" (2.5.4.5).
+        'serial_attribute' => 'surname',
     ],
 
     'storage' => [
@@ -144,6 +149,11 @@ return [
 
     'devices' => [
         'renewal_warning_days' => [30, 14, 7, 1],
+        // Register the daily expiry check with the Laravel scheduler.
+        'schedule_expiry_check' => true,
+        // Developer-portal sandbox only: request the production CSID without running compliance checks
+        // (the developer portal issues it anyway). Never applies to simulation or production.
+        'sandbox_skip_compliance_checks' => env('ZATCA_SANDBOX_SKIP_COMPLIANCE_CHECKS', false),
     ],
 
     'retention' => [

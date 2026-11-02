@@ -80,8 +80,8 @@ Where only community forum answers exist, the item is marked ⚠.
 | Topic | Understanding used by the design | Status |
 |---|---|---|
 | **EGS unit** | The device/solution that generates invoices. It owns a key pair, CSIDs, an ICV counter and a hash chain. | Official concept |
-| **OTP** | Obtained by the taxpayer in the Fatoora portal. Used once for `POST /compliance` (onboarding) or `PATCH /production/csids` (renewal). | ⚠ Confirm the renewal flow (§8.2) |
-| **CSR** | secp256k1 ECDSA key. The CSR subject and SAN carry the EGS serial (`1-…\|2-…\|3-…`), VAT number, invoice-type flags (e.g. `1100`), address and business category. It also carries the certificate template name extension, which is environment-specific. | ⚠ Validate generated CSRs in sandbox |
+| **OTP** | Obtained by the taxpayer in the Fatoora portal. Used once for `POST /compliance` (onboarding) or `PATCH /production/csids` (renewal). | Renewal flow verified on the developer portal 2026-11-02 (§2.3); simulation ⚠ |
+| **CSR** | secp256k1 ECDSA key. The CSR subject and SAN carry the EGS serial (`1-…\|2-…\|3-…`), VAT number, invoice-type flags (e.g. `1100`), address and business category. It also carries the certificate template name extension, which is environment-specific. | Accepted by the developer portal 2026-11-02 (§2.3) |
 | **Compliance CSID** | Returned by `POST /compliance`. Used for `POST /compliance/invoices` sample checks and to request the production CSID. | Official flow |
 | **Production CSID** | Returned by `POST /production/csids` (with `compliance_request_id`). Used to sign invoices and authenticate reporting/clearance. | Official flow |
 | **API authentication** | HTTP Basic with `base64(binarySecurityToken):secret` of the active CSID. **There is no OAuth/bearer token workflow.** | Official; the package exposes `AuthenticationStrategy` for gateway customers |
@@ -114,7 +114,25 @@ Where only community forum answers exist, the item is marked ⚠.
 
 **Cryptographic requirements:**
 - Signing is ECDSA with SHA-256 and a 256-bit key (Req. 16). The CSR is PKCS#10 and signed with the private key as proof of possession (Req. 7).
-- ⚠ The PDF's certificate profile row reads "Key length: P-256", but the ZATCA SDK and all known working integrations use **secp256k1**. The package uses secp256k1 and keeps the curve in the `CsrProfile` config. This is confirmed during M3 sandbox onboarding.
+- ⚠ The PDF's certificate profile row reads "Key length: P-256", but the ZATCA SDK and all known working integrations use **secp256k1**. The package uses secp256k1 and keeps the curve in the `CsrProfile` config. Confirmed: the developer portal issued certificates for secp256k1 CSRs (§2.3).
+
+### 2.3 Live verification results (developer-portal sandbox, 2026-11-02)
+
+Run through the package (`tests/Live/SandboxOnboardingTest.php`, demo Laravel 13 app):
+
+| Check | Result |
+|---|---|
+| `POST /compliance` with our pure-PHP secp256k1 CSR and OTP `123345` | 200 `ISSUED`. The returned certificate's subject equals our CSR subject; issuer `CN=eInvoicing` |
+| `POST /production/csids` with Basic auth = compliance CSID | 200 `ISSUED` (no compliance checks were run: **the developer portal does not enforce them**) |
+| `PATCH /production/csids` with a new CSR, OTP header, Basic auth = current production CSID | 200 `ISSUED` (Q-Z9 answered for the developer portal) |
+| CSR encoding | Signed part byte-identical to `openssl req` with the configuration used by OpenSSL-based integrations |
+
+**CSR encoding facts discovered:**
+- OpenSSL's `SN` short name, used by integrations for the EGS serial, means **surname (2.5.4.4)**, not serialNumber (2.5.4.5). ZATCA accepts it. The package defaults to surname and offers `csr.serial_attribute = serialNumber`. ⚠ The official text names no OID.
+- All directory strings are UTF8String (Arabic works); countryName is PrintableString. The template name is a UTF8String.
+- The Security Standard's Table 1 lists "Invoice Type → businessCategory", but working integrations and the SDK samples put the invoice type in **title (2.5.4.12)** and the industry in businessCategory. The package follows the working form.
+
+Still ⚠ for simulation/production: ZATCA may enforce compliance checks and validate fields more strictly there. M4 adds the checks, and the first simulation onboarding re-verifies this table.
 - Keys "must be marked as non-exportable" from the security module (Req. 6). A software vault with disk/envelope encryption is acceptable under Req. 8. An HSM/KMS signer is supported through the `KeyManagementService` contract.
 - ZATCA relies on the data the taxpayer supplies without further validation (Req. 5), so the console validates every CSR input before submission.
 
@@ -1379,7 +1397,7 @@ Test doubles exist **only** at the HTTP transport. Every service, repository and
 | Q-Z6 | ZATCA response to resubmitting an identical document (same UUID/hash) after a timeout | Reconciliation (§12.1) | Sandbox experiment |
 | Q-Z7 | Does a status lookup API exist? | Reconciliation | API spec |
 | Q-Z8 | Semantics of `303` / clearance deactivation | B2B pipeline | API spec + sandbox |
-| Q-Z9 | Renewal: which credential authenticates `PATCH /production/csids`; are compliance checks repeated? | Renewal | API spec + sandbox |
+| Q-Z9 | **Answered for the developer portal (§2.3):** the current production CSID authenticates the `PATCH`, with an OTP and a new CSR; no compliance checks were needed. Simulation still to confirm | Renewal | Simulation onboarding |
 | Q-Z10 | Exact compliance sample set and its chain expectations | Onboarding | Developer portal manual |
 | Q-Z11 | Published rate limits | Concurrency config | Ask ZATCA / measure |
 | Q-Z12 | **Resolved:** "within 24 hours" of issuance (Detailed Guidelines v1.0 §6.5–6.6) | Deadline calculator | — |

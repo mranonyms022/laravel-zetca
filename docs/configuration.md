@@ -57,7 +57,8 @@ When the resolver returns `null` (e.g. system jobs), no filter is applied.
 | Key | Env | Default | Notes |
 |---|---|---|---|
 | `security.encryption_key` | `ZATCA_ENCRYPTION_KEY` | – | Dedicated master key. Falls back to `APP_KEY` with a warning in production |
-| `security.kms` | – | `null` | Custom key-management service (AWS KMS, Vault…) **(future)** |
+| `security.previous_encryption_keys` | `ZATCA_PREVIOUS_ENCRYPTION_KEYS` | – | Comma-separated old master keys, still used to decrypt after a rotation |
+| `security.kms` | – | `null` | Class implementing `Core\Contracts\Security\KeyManagementService` (AWS KMS, Vault…) |
 | `security.verify_tls` | `ZATCA_VERIFY_TLS` | `true` | **Cannot be disabled in production** (boot fails) |
 | `security.ca_bundle` | `ZATCA_CA_BUNDLE` | – | Custom CA bundle path |
 
@@ -68,6 +69,7 @@ When the resolver returns `null` (e.g. system jobs), no filter is applied.
 | `csr.curve` | – | `secp256k1` |
 | `csr.solution_provider` | `ZATCA_SOLUTION_PROVIDER` | `CodingTriplets` |
 | `csr.solution_model` | `ZATCA_SOLUTION_MODEL` | `laravel-zatca` |
+| `csr.serial_attribute` | – | `surname` | Attribute carrying the EGS serial: `surname` (2.5.4.4, what OpenSSL-based integrations send and ZATCA accepts) or `serialNumber` (2.5.4.5) ⚠ |
 
 The provider and model are used to build the EGS serial number `1-<provider>|2-<model>|3-<serial>`.
 
@@ -108,11 +110,18 @@ Defaults for rejected-invoice handling. Some are pending official ZATCA confirma
 | `correction.credit_note_for_rejected` | `false` |
 | `correction.four_eyes` | `false` |
 
-## Devices, retention, UI, authorization **(future)**
+## Devices
+
+| Key | Env | Default | Notes |
+|---|---|---|---|
+| `devices.renewal_warning_days` | – | `[30, 14, 7, 1]` | `CertificateExpiring` fires once per threshold; the largest one starts `RENEWAL_DUE` |
+| `devices.schedule_expiry_check` | – | `true` | Registers `zatca:devices:check-expiry` daily at 03:15 (needs `schedule:run` in cron) |
+| `devices.sandbox_skip_compliance_checks` | `ZATCA_SANDBOX_SKIP_COMPLIANCE_CHECKS` | `false` | Developer-portal sandbox only: finish onboarding without compliance checks |
+
+## Retention, UI, authorization **(future)**
 
 | Key | Default |
 |---|---|
-| `devices.renewal_warning_days` | `[30, 14, 7, 1]` |
 | `retention.years` | 6 (confirm with your tax advisor) |
 | `retention.outbox_processed_days` | 14 |
 | `ui.enabled` / `ui.prefix` / `ui.domain` / `ui.middleware` / `ui.guard` | `true` / `admin/zatca` / – / `['web','auth']` / – |

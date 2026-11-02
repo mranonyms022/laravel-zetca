@@ -5,6 +5,30 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0-alpha.1] - not yet tagged
+
+### Added
+- Device management (milestone M3):
+  - Pure-PHP CSR generator (secp256k1, ZATCA fields, VAT-group rules). Its signed part is byte-identical
+    to OpenSSL's output for the configuration used by established ZATCA integrations.
+  - Fatoora client for compliance CSID, production CSID and renewal, with ZATCA error codes and a
+    retryable/non-retryable classification.
+  - Envelope-encrypted credential vault (AES-256-GCM) with master-key rotation and a KMS contract.
+  - Onboarding state machine with resume, failure handling and a compliance-check contract (implemented in M4).
+  - Certificate renewal, daily expiry monitoring, and expiry warnings/events.
+  - Hash-chained, append-only audit log with `zatca:audit:verify`.
+  - Commands: `zatca:taxpayer:register`, `zatca:device:register`, `zatca:device:onboard`,
+    `zatca:device:renew`, `zatca:devices`, `zatca:devices:check-expiry`, `zatca:audit:verify`.
+  - Opt-in live test suite against ZATCA's developer portal (`ZATCA_LIVE_SANDBOX=1`).
+- Verified live on 2026-11-02 against the developer portal: compliance CSID, production CSID and renewal.
+- 67 tests passing locally on Laravel 9, 10, 11, 12 and 13.
+
+### Upgrade notes
+- If you published `config/zatca.php` before, re-publish it (`--force`) or copy the new keys
+  (`security.previous_encryption_keys`, `csr.serial_attribute`, `devices.*`, `b2c.*`, `api`, `performance`).
+  Laravel does not merge nested keys of a published config.
+
+
 ## [0.1.0-alpha.1] - not yet tagged
 
 ### Added
