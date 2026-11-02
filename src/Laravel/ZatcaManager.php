@@ -11,7 +11,7 @@ use CodingTriplets\Zatca\Core\Domain\Enums\Environment;
  */
 final class ZatcaManager
 {
-    public const VERSION = '0.2.0-dev';
+    public const VERSION = '0.3.0-dev';
 
     /** @var (\Closure(mixed $user, string $ability): bool)|null */
     private ?\Closure $authCallback = null;

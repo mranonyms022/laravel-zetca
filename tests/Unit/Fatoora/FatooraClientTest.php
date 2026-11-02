@@ -38,6 +38,59 @@ final class FatooraClientTest extends TestCase
         self::assertSame('fake-secret-123', $response->secret());
     }
 
+    public function test_compliance_invoice_check_request_and_pass(): void
+    {
+        $zatca = (new FakeZatca())->error(200, [
+            'validationResults' => ['infoMessages' => [['type' => 'INFO', 'code' => 'XSD_ZATCA_VALID', 'category' => 'XSD validation', 'message' => 'Complied with UBL 2.1 standards', 'status' => 'PASS']], 'warningMessages' => [], 'errorMessages' => [], 'status' => 'PASS'],
+            'reportingStatus' => 'REPORTED',
+            'clearanceStatus' => null,
+            'qrSellertStatus' => null,
+            'qrBuyertStatus' => null,
+        ]);
+        $result = self::client($zatca)->complianceInvoiceCheck('<Invoice/>', 'HASH', 'uuid-1', new CsidCredentials(1, 'CTOKEN', 'CSECRET'));
+
+        $request = $zatca->request(0);
+        self::assertSame(self::BASE . '/compliance/invoices', (string) $request->getUri());
+        self::assertSame('Basic ' . base64_encode('CTOKEN:CSECRET'), $request->getHeaderLine('Authorization'));
+        self::assertSame(['invoiceHash' => 'HASH', 'uuid' => 'uuid-1', 'invoice' => base64_encode('<Invoice/>')], json_decode((string) $request->getBody(), true));
+        self::assertTrue($result->isAccepted());
+        self::assertSame('REPORTED', $result->reportingStatus);
+    }
+
+    public function test_compliance_invoice_rejection_is_a_result_not_an_exception(): void
+    {
+        $zatca = (new FakeZatca())->error(400, [
+            'validationResults' => ['errorMessages' => [['code' => 'BR-KSA-37', 'category' => 'KSA', 'message' => 'Building number must be 4 digits']], 'warningMessages' => [], 'infoMessages' => [], 'status' => 'ERROR'],
+            'clearanceStatus' => 'NOT_CLEARED',
+        ]);
+        $result = self::client($zatca)->complianceInvoiceCheck('<Invoice/>', 'HASH', 'uuid-1', new CsidCredentials(1, 'T', 'S'));
+
+        self::assertFalse($result->isAccepted());
+        self::assertSame('BR-KSA-37', $result->errors[0]['code']);
+    }
+
+    public function test_http_success_alone_is_not_acceptance(): void
+    {
+        $zatca = (new FakeZatca())->error(200, [
+            'validationResults' => ['errorMessages' => [], 'warningMessages' => [], 'infoMessages' => [], 'status' => 'ERROR'],
+            'reportingStatus' => 'NOT_REPORTED',
+        ]);
+
+        self::assertFalse(self::client($zatca)->complianceInvoiceCheck('<Invoice/>', 'H', 'u', new CsidCredentials(1, 'T', 'S'))->isAccepted());
+    }
+
+    public function test_compliance_invoice_server_error_is_retryable_exception(): void
+    {
+        $zatca = (new FakeZatca())->error(503, ['message' => 'Service unavailable']);
+
+        try {
+            self::client($zatca)->complianceInvoiceCheck('<Invoice/>', 'H', 'u', new CsidCredentials(1, 'T', 'S'));
+            self::fail('Expected exception');
+        } catch (FatooraApiException $e) {
+            self::assertTrue($e->retryable);
+        }
+    }
+
     public function test_production_csid_uses_basic_auth_with_compliance_csid(): void
     {
         $zatca = (new FakeZatca())->csidIssued();

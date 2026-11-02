@@ -17,6 +17,12 @@ final class RegisterTaxpayerCommand extends Command
         {--vat= : 15-digit VAT number}
         {--group-tin= : 10-digit member TIN (VAT groups only)}
         {--crn= : Commercial registration number}
+        {--street= : Seller address: street name}
+        {--building= : Seller address: 4-digit building number}
+        {--additional-number= : Seller address: additional number}
+        {--district= : Seller address: district}
+        {--city= : Seller address: city}
+        {--postal-code= : Seller address: 5-digit postal code}
         {--branch-code= : Optional first branch code}
         {--branch-name= : Optional first branch name (CSR organization unit)}';
 
@@ -32,6 +38,7 @@ final class RegisterTaxpayerCommand extends Command
                 'vat_number' => (string) ($this->option('vat') ?: $this->ask('VAT number (15 digits)')),
                 'group_member_tin' => $this->option('group-tin') ?: null,
                 'crn' => $this->option('crn') ?: null,
+                'address' => $this->address(),
             ]);
 
             $this->info("Taxpayer registered: company #{$registration->company_id}, VAT registration #{$registration->id}.");
@@ -47,5 +54,20 @@ final class RegisterTaxpayerCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /** @return array<string, string>|null */
+    private function address(): ?array
+    {
+        $address = array_filter([
+            'street' => $this->option('street'),
+            'building_number' => $this->option('building'),
+            'additional_number' => $this->option('additional-number'),
+            'district' => $this->option('district'),
+            'city' => $this->option('city'),
+            'postal_code' => $this->option('postal-code'),
+        ], static fn ($v) => is_string($v) && trim($v) !== '');
+
+        return $address === [] ? null : $address + ['country' => 'SA'];
     }
 }

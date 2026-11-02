@@ -40,6 +40,8 @@ After [installation](installation.md):
    certificates; expiry monitoring (see [Devices](#devices-register-onboard-renew)).
 4. **Multi-tenancy** scoping (see [Configuration › Multi-tenancy](configuration.md#multi-tenancy)).
 5. **Validation helpers** for ZATCA identifiers (below).
+6. **Invoice engine** (low level): validate an invoice payload and produce signed XML + QR for B2B or B2C
+   (see [Invoice engine](#invoice-engine)). Counter allocation, storage and submission come in M5–M6.
 
 You can browse the data with the provided Eloquent models, for example:
 
@@ -67,8 +69,12 @@ certificates, counter and hash chain. A device must be onboarded with ZATCA befo
 
 ```bash
 php artisan zatca:taxpayer:register --name="Maximum Speed" --legal-name="Maximum Speed Tech Supply LTD" \
-    --vat=399999999900003 --crn=1010010000 --branch-code=RYD --branch-name="Riyadh Branch"
+    --vat=399999999900003 --crn=1010010000 --branch-code=RYD --branch-name="Riyadh Branch" \
+    --street="Prince Sultan" --building=2322 --district=Al-Murabba --city=Riyadh --postal-code=23333
 ```
+
+The seller address (Saudi national address: 4-digit building number, 5-digit postal code) is printed on
+every invoice and is required for the compliance checks during onboarding.
 
 VAT groups (11th digit of the VAT number is `1`) also need `--group-tin=<10-digit member TIN>`. That TIN
 replaces the branch name in the certificate request.
@@ -96,14 +102,17 @@ The OTP is typed as hidden input, sent straight to ZATCA, and never stored or lo
 
 1. Generates a secp256k1 key (stored encrypted) and the certificate signing request (CSR).
 2. Requests the **compliance CSID**.
-3. Runs ZATCA's **compliance checks** (sample invoices). These need the invoice engine, which arrives in M4.
-   Until then onboarding stops with status `AWAITING_COMPLIANCE_CHECKS`. Continue later with
+3. Runs ZATCA's **compliance checks**: it signs a sample invoice, credit note and debit note for each
+   workflow the device is registered for (B2B and/or B2C) and submits them to ZATCA. These samples use
+   their own counter and hash chain; your production chain is not touched. If a check fails, onboarding
+   stops with status `AWAITING_COMPLIANCE_CHECKS` and the ZATCA errors are stored on the onboarding
+   record. Fix the cause (usually the seller address) and continue with
    `php artisan zatca:device:onboard 1 --resume` (no new OTP needed).
 4. Requests the **production CSID** and marks the device `ACTIVE`.
 
-**Developer-portal sandbox only:** the developer portal issues a production CSID without compliance checks.
-Set `ZATCA_SANDBOX_SKIP_COMPLIANCE_CHECKS=true` to finish onboarding there today; its test OTP is `123345`.
-This setting never applies to the simulation or production environments.
+**Developer-portal sandbox:** its test OTP is `123345`. Compliance checks run there too. You can skip them
+in the developer portal only with `ZATCA_SANDBOX_SKIP_COMPLIANCE_CHECKS=true`; this setting never applies
+to the simulation or production environments.
 
 From code:
 
@@ -155,6 +164,81 @@ Every registration, onboarding step and renewal is written to an append-only, ha
 - No command, page or API exports a private key (ZATCA prohibits exporting the stamping key).
 - If your PHP has no CA bundle (common on Windows/WAMP), set `ZATCA_CA_BUNDLE=/path/to/cacert.pem`.
   Do not disable TLS verification.
+
+## Invoice engine
+
+M4 adds the document engine: validation → UBL 2.1 XML → hash → XAdES signature → QR code. B2B
+(standard, `StandardInvoiceGenerator`) and B2C (simplified, `SimplifiedInvoiceGenerator`) are separate:
+each one only accepts its own workflow and never converts one into the other.
+
+> This is the low-level layer. From M5 on, the package allocates the invoice counter (ICV) and previous
+> hash (PIH) under a device lock, stores the signed XML and submits it. Do not keep your own chain in
+> production; use the M5/M6 API when it is available.
+
+### Payload
+
+```php
+$payload = [
+    'workflow'       => 'b2c',                     // b2b | b2c
+    'type'           => 'invoice',                 // invoice | credit_note | debit_note
+    'invoice_number' => 'INV-2026-000123',
+    'issued_at'      => '2026-11-02T14:30:00',     // Asia/Riyadh if no offset is given
+    'payment_means_code' => '10',                  // 10 cash, 30 credit, 42 bank, 48 card
+    'seller' => [
+        'name' => 'Maximum Speed Tech Supply LTD', 'vat_number' => '399999999900003',
+        'id_scheme' => 'CRN', 'id_value' => '1010010000',
+        'address' => ['street' => 'Prince Sultan', 'building_number' => '2322', 'district' => 'Al-Murabba',
+                      'city' => 'Riyadh', 'postal_code' => '23333', 'country' => 'SA'],
+    ],
+    // Optional for B2C. For B2B: name, address, and vat_number or identification {scheme, value}.
+    'buyer' => [],
+    'lines' => [
+        ['name' => 'Book', 'quantity' => '2', 'unit_price' => '30.00', 'discount' => '1.00',
+         'vat_category' => 'S', 'vat_rate' => '15'],
+        ['name' => 'Medicine', 'quantity' => '1', 'unit_price' => '25.00', 'vat_category' => 'Z', 'vat_rate' => '0',
+         'exemption_reason_code' => 'VATEX-SA-35', 'exemption_reason' => 'Medicines and medical equipment'],
+    ],
+    'allowances' => [['amount' => '5.00', 'reason' => 'Loyalty discount', 'vat_category' => 'S', 'vat_rate' => '15']],
+    'charges'    => [],
+    // Credit / debit notes: 'billing_reference' => 'INV-2026-000100', 'reason' => 'Returned goods'
+];
+```
+
+- Amounts are decimal strings (numbers are accepted). Prices exclude VAT. All maths is exact decimal
+  arithmetic, rounded half-up to 2 decimals per VAT group.
+- `vat_rate` is a percentage (`15`, not `0.15`).
+- **The VAT category is required.** If it is missing and the rate is 15, `S` is assumed and a warning
+  (`INFERRED`) is returned. A missing category with a 0% rate is an error, because 0% can mean zero-rated
+  (`Z`), exempt (`E`) or out of scope (`O`). Z, E and O need a `VATEX-…` reason code and a reason text.
+  A VAT breakdown is always written, also for single-line invoices (this avoids the BR-S-01 class of
+  rejections).
+- Advance payment adjustments (`prepaid_amount`) are not supported yet and are rejected.
+
+### Validate and generate
+
+```php
+use CodingTriplets\Zatca\Core\Invoice\B2C\Generator\SimplifiedInvoiceGenerator;
+
+$generator = new SimplifiedInvoiceGenerator();
+$result = $generator->validate($payload);           // no counter used, nothing signed
+$result->isValid();
+$result->errors();   // [['field' => 'lines.0.vat_category', 'code' => 'BR-CL-18', 'message' => '...'], ...]
+$result->warnings();
+```
+
+All problems are reported at once, each with the field path and the ZATCA rule ID where one applies.
+`generate($payload, $chainPosition, $uuid, $signingCredentials)` returns the signed XML, invoice hash and
+QR code, or throws `InvoiceValidationException` (with `->result`) before anything is signed.
+
+### What was verified
+
+- Hash, signature, certificate digest, signed-properties digest and QR layout reproduce ZATCA's own SDK
+  samples byte-for-byte (`tests/Unit/Invoice/SdkGoldenTest.php`).
+- Live on ZATCA's developer portal (2026-11-02): standard and simplified invoice, credit note and debit
+  note, plus mixed S/Z/E/O categories, line discounts, document allowances and charges, and B2B buyers
+  without a VAT number. All were accepted (CLEARED / REPORTED) with no errors.
+- Local validation covers the rules that can be checked before signing. ZATCA applies the full rule set;
+  its errors and warnings are returned as received.
 
 ## Data model reference
 
@@ -227,9 +311,9 @@ try {
 | Milestone | Adds | Status |
 |---|---|---|
 | M2 Foundation | Schema, models, configuration, core types, compatibility CI | **Done** |
-| M3 Devices | Encrypted key vault, CSR generation, onboarding (compliance CSID → compliance checks → production CSID), renewal, expiry alerts, audit trail | **Done (0.2.0-dev)**. Compliance checks plug in with M4 |
-| M4 Invoice engine | B2B and B2C XML generation, hashing, signing, QR, compliance checks, validated against ZATCA's SDK | Next |
-| M5 Processing | Atomic ICV/PIH issuing, immutable XML storage, outbox, queues, retries, error engine, audit | Planned |
+| M3 Devices | Encrypted key vault, CSR generation, onboarding (compliance CSID → compliance checks → production CSID), renewal, expiry alerts, audit trail | **Done** |
+| M4 Invoice engine | B2B and B2C XML generation, hashing, signing, QR, compliance checks, validated against ZATCA's SDK | **Done (0.3.0-dev)** |
+| M5 Processing | Atomic ICV/PIH issuing, immutable XML storage, outbox, queues, retries, error engine, audit | Next |
 | M6 ZATCA workflows | B2B clearance, B2C reporting, retry / correct-and-reprocess / credit-debit note operations | Planned |
 | M7 Dashboard | `/admin/zatca` console: dashboards, B2B/B2C lists, JSON correction editor, devices, errors, logs, reports, permissions | Planned |
 | M8 Release | Performance testing, security review, full documentation, 1.0.0 | Planned |

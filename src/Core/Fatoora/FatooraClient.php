@@ -22,7 +22,8 @@ use Psr\Http\Message\StreamFactoryInterface;
  *  PATCH /production/csids     Basic(production CSID), OTP header, {csr}       -> renewed production CSID ⚠
  *
  * The OTP is passed through to ZATCA and never stored or logged.
- * Invoice endpoints (compliance checks, clearance, reporting) are added in M4/M6.
+ *  POST  /compliance/invoices  Basic(compliance CSID), {invoiceHash, uuid, invoice} -> validation result
+ * Clearance and reporting endpoints are added in M6.
  */
 final class FatooraClient
 {
@@ -58,6 +59,36 @@ final class FatooraClient
             ->withHeader('OTP', self::otp($otp));
 
         return $this->csid($this->auth->authenticate($request, $production));
+    }
+
+    /**
+     * POST /compliance/invoices: ZATCA validates a sample document signed with the compliance CSID.
+     * 200 = PASS, 202 = accepted with warnings, 400 = rejected; other statuses throw.
+     */
+    public function complianceInvoiceCheck(string $signedXml, string $invoiceHash, string $uuid, CsidCredentials $compliance): InvoiceSubmissionResult
+    {
+        $request = $this->json('POST', '/compliance/invoices', [
+            'invoiceHash' => $invoiceHash,
+            'uuid' => $uuid,
+            'invoice' => base64_encode($signedXml),
+        ]);
+
+        return $this->invoiceResult($this->auth->authenticate($request, $compliance));
+    }
+
+    private function invoiceResult(RequestInterface $request): InvoiceSubmissionResult
+    {
+        $response = $this->send($request);
+        $status = $response->getStatusCode();
+        $body = self::decode($response);
+
+        if (in_array($status, [200, 202, 400], true) && isset($body['validationResults'])) {
+            return InvoiceSubmissionResult::fromResponse($status, $body);
+        }
+
+        throw $status >= 500 || $status === 429
+            ? FatooraApiException::transport("HTTP {$status}: " . (self::errors($body)[0]['message'] ?? 'server error'))
+            : FatooraApiException::rejected($status, self::errors($body));
     }
 
     private function csid(RequestInterface $request): CsidResponse

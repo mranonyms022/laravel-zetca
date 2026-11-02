@@ -138,7 +138,7 @@ final class DeviceOnboardingService
 
         // Step 3: compliance checks.
         if ($device->lifecycle_status !== S::CompliancePassed) {
-            if ($this->checks === null) {
+            if ($this->checks === null || $this->maySkipComplianceChecks($device->environment)) {
                 if (! $this->maySkipComplianceChecks($device->environment)) {
                     $onboarding->update(['status' => self::STATUS_AWAITING_CHECKS, 'current_step' => 'compliance_checks']);
 

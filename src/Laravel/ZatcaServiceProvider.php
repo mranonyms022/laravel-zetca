@@ -108,6 +108,9 @@ final class ZatcaServiceProvider extends ServiceProvider
                 ? CsrGenerator::SERIAL_ATTRIBUTE_SERIAL_NUMBER
                 : CsrGenerator::SERIAL_ATTRIBUTE_SURNAME,
         ));
+        if (! $this->app->bound(ComplianceCheckRunner::class)) {
+            $this->app->bind(ComplianceCheckRunner::class, \CodingTriplets\Zatca\Laravel\Devices\FatooraComplianceCheckRunner::class);
+        }
         $this->app->bind(DeviceOnboardingService::class, static fn (Application $app) => new DeviceOnboardingService(
             $app->make(TransactionManager::class),
             $app->make(AdvisoryLock::class),

@@ -5,6 +5,33 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0-alpha.1] - not yet tagged
+
+### Added
+- Invoice engine (milestone M4):
+  - Separate B2B (`StandardInvoiceGenerator`, `StandardBusinessRules`) and B2C
+    (`SimplifiedInvoiceGenerator`, `SimplifiedBusinessRules`) pipelines; a payload for one workflow is
+    rejected by the other, never converted.
+  - Payload mapper with field-level errors and ZATCA rule IDs; all errors collected in one pass.
+  - Exact decimal totals and VAT breakdown (brick/math, half-up, per VAT group). The breakdown is always
+    written (avoids the BR-S-01 class of rejections). A missing VAT category is inferred as S only at
+    15% (with a warning); 0% without a category is an error.
+  - UBL 2.1 writer in ZATCA's sample layout, invoice hashing (C14N), XAdES signing, QR TLV (tags 1-9)
+    and an independent `SignatureVerifier`. Every signed document is self-verified before it is returned.
+  - Hardened XML parsing (no DTD/entities, no network).
+  - Fatoora `POST /compliance/invoices` and `InvoiceSubmissionResult` (acceptance is read from the
+    response body, never from the HTTP status alone).
+  - Compliance checks during onboarding (`FatooraComplianceCheckRunner`, bound by default): invoice,
+    credit note and debit note per registered workflow, on a separate sample chain.
+  - Seller address options on `zatca:taxpayer:register`.
+- Verified against the ZATCA SDK 238-R3.3.3 samples and live on the developer portal (2026-11-02).
+- 102 tests passing locally on Laravel 9, 10, 11, 12 and 13 (brick/math 0.11 to 1.0).
+
+### Changed
+- Onboarding now runs ZATCA compliance checks by default. `ZATCA_SANDBOX_SKIP_COMPLIANCE_CHECKS=true`
+  still skips them on the developer portal only.
+- New dependency: `brick/math` (already installed with Laravel).
+
 ## [0.2.0-alpha.1] - not yet tagged
 
 ### Added
@@ -14,7 +41,7 @@ and the project uses [Semantic Versioning](https://semver.org/).
   - Fatoora client for compliance CSID, production CSID and renewal, with ZATCA error codes and a
     retryable/non-retryable classification.
   - Envelope-encrypted credential vault (AES-256-GCM) with master-key rotation and a KMS contract.
-  - Onboarding state machine with resume, failure handling and a compliance-check contract (implemented in M4).
+  - Onboarding state machine with resume, failure handling and a compliance-check contract.
   - Certificate renewal, daily expiry monitoring, and expiry warnings/events.
   - Hash-chained, append-only audit log with `zatca:audit:verify`.
   - Commands: `zatca:taxpayer:register`, `zatca:device:register`, `zatca:device:onboard`,
