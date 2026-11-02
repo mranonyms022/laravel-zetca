@@ -5,6 +5,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- HTTP API: `POST invoices/{invoice_id}/credit-note`, `/debit-note` and `/cancel`.
+- HTTP API: the device can be sent as `"device"` in the JSON body instead of the `X-Zatca-Device` header.
+
 ## [0.7.0] - 2026-11-03
 
 First tagged release: everything below (M1–M7). Before 1.0, minor versions may change the database schema; read this changelog and run `php artisan migrate` after updating. Test in the ZATCA sandbox before going to production.

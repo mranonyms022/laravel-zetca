@@ -3,6 +3,16 @@
 The same payload format is used by `Zatca::b2c()`, `Zatca::b2b()`, corrections and the HTTP API. Keys
 are snake_case. Amounts are **decimal strings** (numbers are accepted); prices **exclude VAT**.
 
+::: tip Device, workflow and notes are not payload fields
+- **Device:** passed separately: `issue($payload, ['device' => $id])` in PHP, or `X-Zatca-Device` /
+  `"device"` in the [HTTP API](./http-api). The seller (name, VAT number, address) comes from the device.
+- **B2C or B2B:** chosen by the call (`Zatca::b2c()` / `Zatca::b2b()`, or `/b2c/invoices` /
+  `/b2b/invoices`), not by a type code in the payload.
+- **Credit / debit notes and cancellation:** separate calls on the original invoice, see
+  [Credit and debit notes](./notes) and [Cancelling invoices](./cancellation).
+- **VAT category per line:** see [Lines](#lines) and [VAT exemption codes](#vat-exemption-codes).
+:::
+
 ## Minimal B2C invoice
 
 ```php

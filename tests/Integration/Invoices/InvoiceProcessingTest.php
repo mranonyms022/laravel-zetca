@@ -312,6 +312,46 @@ final class InvoiceProcessingTest extends IntegrationTestCase
         $this->getJson('/api/zatca/invoices/' . $response->json('invoice_id'))->assertOk()->assertJson(['counter' => 1]);
     }
 
+    public function test_http_api_device_in_body_notes_and_cancel(): void
+    {
+        config(['zatca.api.enabled' => true]);
+        $this->refreshRoutes();
+
+        // device in the body instead of the header; "device" is not stored as part of the payload
+        $first = $this->postJson('/api/zatca/b2c/invoices', $this->payload('API-2') + ['device' => $this->device->device_uuid])
+            ->assertStatus(201)->json();
+        $second = $this->postJson('/api/zatca/b2c/invoices', $this->payload('API-3') + ['device' => (string) $this->device->id])
+            ->assertStatus(201)->json();
+        $this->zatca->reported();
+        $this->zatca->reported();
+        app(OutboxRelay::class)->relay();
+
+        // notes need a reason
+        $this->postJson("/api/zatca/invoices/{$first['invoice_id']}/credit-note", $this->payload('API-2-CN', '5.00'))
+            ->assertStatus(422)->assertJsonPath('errors.0.field', 'reason');
+
+        $credit = $this->postJson("/api/zatca/invoices/{$first['invoice_id']}/credit-note", $this->payload('API-2-CN', '5.00') + ['reason' => 'Item returned'])
+            ->assertStatus(201)->json();
+        self::assertNotEmpty($credit['qr']);
+        $note = Invoice::query()->where('public_id', $credit['invoice_id'])->firstOrFail();
+        self::assertSame($first['invoice_id'], Invoice::query()->whereKey($note->billing_reference_invoice_id)->value('public_id'));
+
+        $this->postJson("/api/zatca/invoices/{$first['invoice_id']}/debit-note", $this->payload('API-2-DN', '2.00') + ['reason' => 'Delivery charge'])
+            ->assertStatus(201);
+
+        // credits may not exceed the invoice (+ its debit notes)
+        $this->postJson("/api/zatca/invoices/{$first['invoice_id']}/credit-note", $this->payload('API-2-CN2', '500.00') + ['reason' => 'Too much'])
+            ->assertStatus(409);
+
+        $cancel = $this->postJson("/api/zatca/invoices/{$second['invoice_id']}/cancel", ['reason' => 'Order cancelled'])
+            ->assertStatus(201)->json();
+        $original = Invoice::query()->where('public_id', $second['invoice_id'])->firstOrFail();
+        self::assertSame($cancel['invoice_id'], Invoice::query()->whereKey($original->cancellation_invoice_id)->value('public_id'));
+        $this->postJson("/api/zatca/invoices/{$second['invoice_id']}/cancel", ['reason' => 'Again'])->assertStatus(409);
+
+        $this->postJson('/api/zatca/invoices/01UNKNOWN000000000000000000/cancel', ['reason' => 'x'])->assertStatus(404);
+    }
+
     private function zatca(): ZatcaManager
     {
         return app(ZatcaManager::class);

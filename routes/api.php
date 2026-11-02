@@ -13,4 +13,7 @@ Route::prefix((string) config('zatca.api.prefix', 'api/zatca'))
         Route::post('b2c/invoices', [InvoiceApiController::class, 'b2c'])->name('zatca.api.b2c');
         Route::post('b2b/invoices', [InvoiceApiController::class, 'b2b'])->name('zatca.api.b2b');
         Route::get('invoices/{publicId}', [InvoiceApiController::class, 'show'])->name('zatca.api.show');
+        Route::post('invoices/{publicId}/credit-note', [InvoiceApiController::class, 'creditNote'])->name('zatca.api.credit_note');
+        Route::post('invoices/{publicId}/debit-note', [InvoiceApiController::class, 'debitNote'])->name('zatca.api.debit_note');
+        Route::post('invoices/{publicId}/cancel', [InvoiceApiController::class, 'cancel'])->name('zatca.api.cancel');
     });
