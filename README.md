@@ -43,7 +43,7 @@ Compatibility is claimed only for combinations that pass CI ([`.github/workflows
 | 13.x | 8.3 – 8.4 | Targeted |
 | 14.x | — | Not released; added once stable and green in CI |
 
-Supported databases: MySQL 8.0+, MariaDB 10.6+, PostgreSQL 13+, SQL Server 2019+. SQLite is for development and tests only.
+Supported databases: MySQL 8.0+ and MariaDB 10.6+. PostgreSQL and SQL Server are planned but their test runs do not pass yet. SQLite is for development and tests only.
 
 ## Installation (development)
 

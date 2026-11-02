@@ -6,7 +6,7 @@ Issuing a B2C invoice in `queue` mode does: store the JSON, validate, lock the d
 sign the XML, store it, commit, push a queue job. **ZATCA is not called in the request.**
 
 Measured on a developer laptop (Windows, SQLite, PHP 8.4, one process, warm): signing about 4 ms,
-complete issuance p50 about 89 ms, most of it database commits. On a server with MySQL/PostgreSQL on fast
+complete issuance p50 about 89 ms, most of it database commits. On a server with MySQL/MariaDB on fast
 disks and Redis queues, expect a lower figure; measure on your own hardware before committing to a
 target.
 
@@ -50,7 +50,7 @@ the package alone cannot guarantee a given rate.
 
 ## Infrastructure checklist
 
-- Database: InnoDB (MySQL/MariaDB) or PostgreSQL; enough connections for web + workers.
+- Database: InnoDB (MySQL/MariaDB); enough connections for web + workers.
 - Queue and cache: Redis. Not the `sync` driver, not the `file` cache with several servers.
 - Artifact disk: shared (S3) when several servers issue invoices.
 - PHP: OPcache on; Octane or long-running workers benefit from the in-memory key cache.

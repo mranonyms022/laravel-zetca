@@ -51,6 +51,11 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: dom, libxml, mbstring, openssl, pdo_sqlite, sodium, bcmath
           coverage: none
+      # Laravel 9-11 are end-of-life and every release has open security advisories; Composer 2.9+
+      # refuses to install them by default. Allowed here only to prove compatibility.
+      - name: Allow end-of-life Laravel ${{ matrix.laravel }}
+        if: matrix.laravel == '9' || matrix.laravel == '10' || matrix.laravel == '11'
+        run: composer config --no-interaction audit.block-insecure false
       - name: Pin Laravel ${{ matrix.laravel }}
         run: |
           composer require --no-update --no-interaction "illuminate/support:^${{ matrix.laravel }}.0"
