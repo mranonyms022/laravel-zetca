@@ -2,7 +2,7 @@
     "name": "codingtriplets/laravel-zatca",
     "description": "ZATCA Phase 2 (Fatoora) e-invoicing engine and management console for Laravel: B2B clearance, B2C reporting, device onboarding, ICV/PIH chaining, corrections and audit.",
     "type": "library",
-    "license": "proprietary",
+    "license": "MIT",
     "keywords": ["zatca", "fatoora", "e-invoicing", "saudi", "vat", "laravel", "ubl"],
     "authors": [
         {

@@ -12,7 +12,7 @@ where customers point Composer.
 
 ## Before the first release
 
-- [ ] Decide public vs private and set `"license"` in `composer.json` (currently `proprietary`)
+- [x] Public, MIT: `LICENSE` and `"license": "MIT"` in `composer.json`
 - [ ] Add a `LICENSE` file
 - [ ] CI is green on GitHub Actions for every Laravel/PHP cell you list as supported
 - [ ] `composer validate --strict` passes
