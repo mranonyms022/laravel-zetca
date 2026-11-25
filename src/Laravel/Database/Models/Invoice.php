@@ -44,6 +44,21 @@ class Invoice extends ZatcaModel
         'credited_amount' => 'decimal:2',
         'debited_amount' => 'decimal:2',
         'closed_at' => 'datetime',
+        // Explicit integer casts: pdo_sqlsrv returns integer columns as strings.
+        'company_id' => 'integer',
+        'vat_registration_id' => 'integer',
+        'branch_id' => 'integer',
+        'device_id' => 'integer',
+        'billing_reference_invoice_id' => 'integer',
+        'cancellation_invoice_id' => 'integer',
+        'current_version_id' => 'integer',
+        'current_issuance_id' => 'integer',
+        'issuance_count' => 'integer',
+        'attempts' => 'integer',
+        'unresolved_error_count' => 'integer',
+        'warning_count' => 'integer',
+        'approved_by' => 'integer',
+        'created_by' => 'integer',
     ];
 
     /** The host application's record this invoice was issued for (`'source' => $model` option). */

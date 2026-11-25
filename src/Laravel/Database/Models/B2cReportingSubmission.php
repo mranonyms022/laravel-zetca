@@ -18,6 +18,9 @@ class B2cReportingSubmission extends ZatcaModel
         'deadline_at' => 'datetime',
         'manual' => 'boolean',
         'deadline_breached' => 'boolean',
+        'attempts' => 'integer',   // pdo_sqlsrv returns integers as strings
+        'issuance_id' => 'integer',
+        'invoice_id' => 'integer',
     ];
 
     public function issuance(): BelongsTo

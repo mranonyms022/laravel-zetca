@@ -16,6 +16,10 @@ class B2bClearanceSubmission extends ZatcaModel
         'first_attempt_at' => 'datetime',
         'completed_at' => 'datetime',
         'manual' => 'boolean',
+        'attempts' => 'integer',   // pdo_sqlsrv returns integers as strings
+        'issuance_id' => 'integer',
+        'invoice_id' => 'integer',
+        'cleared_artifact_id' => 'integer',
     ];
 
     public function issuance(): BelongsTo

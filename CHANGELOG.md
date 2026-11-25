@@ -9,6 +9,10 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - **SQL Server: every invoice failed** ("This database engine does not support inserting while ignoring errors").
   The device counter, outbox and error-group inserts now use `INSERT … SELECT … WHERE NOT EXISTS` with
   `UPDLOCK, HOLDLOCK` on SQL Server; duplicate protection is unchanged on every database.
+- SQL Server: the invoice detail **Lines** tab failed (`ORDER BY` repeated a column).
+- SQL Server: abandoning an invoice and four-eyes approval failed with a `TypeError`, because `pdo_sqlsrv` returns
+  integer columns as strings. Invoice and submission models now cast their id and counter columns to integers.
+- The full test suite now passes on SQL Server 2019 (ODBC Driver 17, Microsoft Drivers for PHP 5.13.3).
 - B2C `deadline_at` and issuance `signing_time` were stored as Riyadh wall-clock time in the application timezone
   (3 hours late with `APP_TIMEZONE=UTC`, so a 27 h reporting window). Both are now stored in the application timezone.
 

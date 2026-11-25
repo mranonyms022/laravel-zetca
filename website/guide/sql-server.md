@@ -15,11 +15,11 @@ SQLSTATE[IMSSP]: This extension requires the Microsoft ODBC Driver for SQL Serve
 
 That message means step 1 is missing. `could not find driver` means step 2 is missing.
 
-::: warning ⚠ Test status
-The package's automated test suite has not yet completed a run on SQL Server (the CI machine lacked the
-ODBC driver). MySQL, MariaDB and PostgreSQL pass the full suite. If you use SQL Server, run the package's
-tests against your server once (see [the end of this page](#verify-with-the-package-tests)) and report any
-failure.
+::: tip Test status
+The full test suite passes on SQL Server 2019 (Developer Edition, ODBC Driver 17, Microsoft Drivers for PHP
+5.13.3), including the parallel-issuance test that issues invoices on one device from several processes at once.
+Running the package's tests against your own server once (see
+[the end of this page](#verify-with-the-package-tests)) is still a good check of your setup.
 :::
 
 ## Windows

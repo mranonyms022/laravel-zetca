@@ -62,7 +62,8 @@ final class InvoiceController
 
         $invoice->load(['device:id,name,environment', 'billingReference:id,public_id,invoice_number', 'cancellationNote:id,public_id,invoice_number']);
         $data = match ($tab) {
-            'lines' => ['lines' => $invoice->lines()->orderBy('line_no')->get(), 'vat' => $invoice->vatBreakdown()->get()],
+            // lines() is already ordered by line_no (SQL Server rejects a repeated ORDER BY column).
+            'lines' => ['lines' => $invoice->lines()->get(), 'vat' => $invoice->vatBreakdown()->get()],
             'versions' => ['versions' => $invoice->versions()->orderBy('version')->get()],
             'issuances' => ['issuances' => $invoice->issuances()->orderBy('sequence')->get(),
                 'artifacts' => InvoiceArtifact::query()->where('invoice_id', $invoice->id)->get(InvoiceArtifact::LIST_COLUMNS)->groupBy('issuance_id')],
