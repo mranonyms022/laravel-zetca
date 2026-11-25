@@ -124,7 +124,25 @@ final class FatooraClient
             throw FatooraApiException::unexpected($status, 'response without validationResults');
         }
 
-        throw FatooraApiException::rejected($status, self::errors($body));
+        $e = FatooraApiException::rejected($status, self::errors($body));
+        $e->retryAfter = self::retryAfter($response->getHeaderLine('Retry-After'));
+
+        throw $e;
+    }
+
+    /** Retry-After as seconds (delta-seconds or HTTP date), null when absent or unreadable. */
+    private static function retryAfter(string $header): ?int
+    {
+        $header = trim($header);
+        if ($header === '') {
+            return null;
+        }
+        if (ctype_digit($header)) {
+            return (int) $header;
+        }
+        $at = strtotime($header);
+
+        return $at === false ? null : max(0, $at - time());
     }
 
     private function csid(RequestInterface $request): CsidResponse

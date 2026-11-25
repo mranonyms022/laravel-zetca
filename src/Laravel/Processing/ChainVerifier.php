@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace CodingTriplets\Zatca\Laravel\Processing;
 
-use CodingTriplets\Zatca\Core\Contracts\Storage\ArtifactStore;
-use CodingTriplets\Zatca\Core\Contracts\Storage\StoredArtifact;
+use CodingTriplets\Zatca\Laravel\Storage\InvoiceArtifacts;
 use CodingTriplets\Zatca\Core\Domain\Enums\ArtifactKind;
 use CodingTriplets\Zatca\Core\Domain\Enums\ErrorCategory;
 use CodingTriplets\Zatca\Core\Domain\Enums\Severity;
@@ -26,7 +25,7 @@ use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceIssuance;
 final class ChainVerifier
 {
     public function __construct(
-        private readonly ArtifactStore $artifacts,
+        private readonly InvoiceArtifacts $artifacts,
         private readonly ErrorRecorder $errors,
         private readonly InvoiceHasher $hasher = new InvoiceHasher(),
     ) {
@@ -95,7 +94,7 @@ final class ChainVerifier
         }
 
         try {
-            $xml = $this->artifacts->get(new StoredArtifact((string) $artifact->disk, (string) $artifact->path, (string) $artifact->sha256, (int) $artifact->bytes, (bool) $artifact->encrypted));
+            $xml = $this->artifacts->contents($artifact);
         } catch (\Throwable $e) {
             return 'signed XML unreadable: ' . $e->getMessage();
         }

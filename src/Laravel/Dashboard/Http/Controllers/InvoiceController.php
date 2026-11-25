@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace CodingTriplets\Zatca\Laravel\Dashboard\Http\Controllers;
 
-use CodingTriplets\Zatca\Core\Contracts\Storage\ArtifactStore;
-use CodingTriplets\Zatca\Core\Contracts\Storage\StoredArtifact;
 use CodingTriplets\Zatca\Core\Domain\Enums\ArtifactKind;
 use CodingTriplets\Zatca\Core\Domain\Enums\Workflow;
 use CodingTriplets\Zatca\Laravel\Dashboard\Abilities;
@@ -16,6 +14,7 @@ use CodingTriplets\Zatca\Laravel\Database\Models\Invoice;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceArtifact;
 use CodingTriplets\Zatca\Laravel\Invoices\InvoiceOperations;
 use CodingTriplets\Zatca\Laravel\Invoices\OperationNotAllowed;
+use CodingTriplets\Zatca\Laravel\Storage\InvoiceArtifacts;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -66,7 +65,7 @@ final class InvoiceController
             'lines' => ['lines' => $invoice->lines()->orderBy('line_no')->get(), 'vat' => $invoice->vatBreakdown()->get()],
             'versions' => ['versions' => $invoice->versions()->orderBy('version')->get()],
             'issuances' => ['issuances' => $invoice->issuances()->orderBy('sequence')->get(),
-                'artifacts' => InvoiceArtifact::query()->where('invoice_id', $invoice->id)->get()->groupBy('issuance_id')],
+                'artifacts' => InvoiceArtifact::query()->where('invoice_id', $invoice->id)->get(InvoiceArtifact::LIST_COLUMNS)->groupBy('issuance_id')],
             'attempts' => ['attempts' => $invoice->attempts()->orderByDesc('id')->limit(200)->get()],
             'errors' => ['zatcaErrors' => $invoice->errors()->orderByDesc('id')->get(), 'warnings' => $invoice->warnings()->orderByDesc('id')->get()],
             'history' => ['logs' => $invoice->processingLogs()->orderByDesc('id')->limit(500)->get()],
@@ -110,14 +109,14 @@ final class InvoiceController
         return redirect()->route(config('zatca.ui.route_name_prefix', 'zatca.') . 'invoices.show', $invoice->public_id)->with('zatca_status', $message);
     }
 
-    public function artifact(Request $request, string $publicId, int $artifactId, ArtifactStore $store): Response
+    public function artifact(Request $request, string $publicId, int $artifactId, InvoiceArtifacts $store): Response
     {
         $invoice = $this->find($request, $publicId);
         abort_unless($this->permissions->allows($this->user($request), Abilities::INVOICES_EXPORT, $invoice), 403);
 
         $artifact = InvoiceArtifact::query()->where('invoice_id', $invoice->id)->whereKey($artifactId)->firstOrFail();
         abort_unless(in_array($artifact->kind, [ArtifactKind::SignedXml, ArtifactKind::ClearedXml], true), 404);
-        $xml = $store->get(new StoredArtifact($artifact->disk, $artifact->path, $artifact->sha256, (int) $artifact->bytes, (bool) $artifact->encrypted));
+        $xml = $store->contents($artifact);
 
         $name = preg_replace('/[^A-Za-z0-9._-]+/', '_', "{$invoice->invoice_number}_{$artifact->kind->value}") . '.xml';
 

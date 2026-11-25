@@ -16,9 +16,10 @@ use CodingTriplets\Zatca\Laravel\Database\Models\ProcessingLog;
 
 /**
  * B2C reporting deadline watch (ARCHITECTURE 11): simplified documents must be reported within 24 hours.
- *  - `InvoiceReportingDeadlineAtRisk` once per threshold in `zatca.b2c.deadline_alert_hours` (default 4 h, 1 h);
+ *  - `InvoiceReportingDeadlineAtRisk` once per threshold in `zatca.b2c.deadline_alert_hours` (default 12 h, 4 h, 1 h);
  *  - after the deadline: `deadline_breached` is set, a CRITICAL error is recorded and
- *    `InvoiceReportingDeadlineBreached` fires. Reporting continues: a late report is better than none.
+ *    `InvoiceReportingDeadlineBreached` fires. Automatic retries for an outage stop at the deadline (retry window
+ *    closed, see RetryPolicy); a manual retry still reports the document late, which is better than not at all.
  * Idempotent: alerts already logged for an issuance are not repeated.
  */
 final class DeadlineMonitor
@@ -37,7 +38,7 @@ final class DeadlineMonitor
     public function check(?\DateTimeInterface $now = null): array
     {
         $now = $now !== null ? \Illuminate\Support\Carbon::instance($now) : now();
-        $thresholds = array_values(array_unique(array_map('intval', (array) config('zatca.b2c.deadline_alert_hours', [4, 1]))));
+        $thresholds = array_values(array_unique(array_map('intval', (array) config('zatca.b2c.deadline_alert_hours', [12, 4, 1]))));
         rsort($thresholds);
         $horizon = $now->copy()->addHours(max([0, ...$thresholds]));
         $counts = ['at_risk' => 0, 'breached' => 0];

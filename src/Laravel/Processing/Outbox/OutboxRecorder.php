@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CodingTriplets\Zatca\Laravel\Processing\Outbox;
 
 use CodingTriplets\Zatca\Core\Contracts\Persistence\TransactionManager;
+use CodingTriplets\Zatca\Laravel\Database\InsertIgnore;
 use CodingTriplets\Zatca\Laravel\Database\Models\OutboxMessage;
 
 /**
@@ -40,9 +41,9 @@ final class OutboxRecorder
         $key = mb_substr($idempotencyKey, 0, 191);
         $model = new OutboxMessage();
         $now = now();
-        // insertOrIgnore: recording the same intent twice is a no-op, also concurrently and inside PostgreSQL
-        // transactions (a caught unique violation would abort the surrounding transaction there).
-        $inserted = $model->getConnection()->table($model->getTable())->insertOrIgnore([
+        // Insert-or-ignore: recording the same intent twice is a no-op, also concurrently and inside PostgreSQL
+        // transactions (a caught unique violation would abort the surrounding transaction there). SQL Server included.
+        $inserted = InsertIgnore::row($model->getConnection(), $model->getTable(), [
             'tenant_id' => (string) ($tenantId ?? app(\CodingTriplets\Zatca\Core\Contracts\Tenancy\TenantResolver::class)->current() ?? ''),
             'aggregate_type' => $aggregateType,
             'aggregate_id' => $aggregateId,
@@ -54,7 +55,7 @@ final class OutboxRecorder
             'attempts' => 0,
             'created_at' => $now,
             'updated_at' => $now,
-        ]);
+        ], ['idempotency_key']);
         $message = OutboxMessage::query()->withoutGlobalScopes()->where('idempotency_key', $key)->firstOrFail();
         if ($inserted === 0) {
             return $message;

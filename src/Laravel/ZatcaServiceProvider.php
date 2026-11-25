@@ -49,7 +49,7 @@ final class ZatcaServiceProvider extends ServiceProvider
         $this->app->singleton(ZatcaManager::class);
 
         $this->app->singleton(TransactionManager::class, static fn (Application $app) => new EloquentTransactionManager($app['db']));
-        $this->app->singleton(AdvisoryLock::class, static fn (Application $app) => new CacheAdvisoryLock($app['cache']->store()));
+        $this->app->singleton(AdvisoryLock::class, static fn (Application $app) => new CacheAdvisoryLock($app['cache']->store(config('zatca.cache_store'))));
         $this->app->singleton(EventDispatcher::class, static fn (Application $app) => new LaravelEventDispatcher(
             static fn () => $app['events'],
             $app->make(TransactionManager::class),
@@ -146,11 +146,18 @@ final class ZatcaServiceProvider extends ServiceProvider
             (int) config('zatca.queues.high_water_mark', 5000),
             (int) config('zatca.outbox.lease_seconds', 600),
         ));
+        // Circuit breaker and rate limiter share one cache store (zatca.cache_store) so every worker on every server
+        // sees the same circuit and the same request budget.
         $app->singleton(Processing\Submission\CircuitBreaker::class, static fn (Application $app) => new Processing\Submission\CircuitBreaker(
-            $app['cache']->store(),
+            $app['cache']->store(config('zatca.cache_store')),
             (int) config('zatca.http.circuit.failures', 5),
-            (int) config('zatca.http.circuit.open_seconds', 60),
+            (int) config('zatca.http.circuit.open_seconds', 30),
+            (int) config('zatca.http.circuit.max_open_seconds', 600),
+            (int) config('zatca.http.circuit.probe_seconds', 120),
         ));
+        $app->when(Processing\Submission\SubmissionRunner::class)
+            ->needs(\Illuminate\Cache\RateLimiter::class)
+            ->give(static fn (Application $app) => new \Illuminate\Cache\RateLimiter($app['cache']->store(config('zatca.cache_store'))));
         $app->singleton(Dashboard\PermissionResolver::class, static function (Application $app): Dashboard\PermissionResolver {
             $class = config('zatca.authorization.resolver');
 

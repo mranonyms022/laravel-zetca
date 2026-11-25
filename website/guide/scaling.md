@@ -45,13 +45,15 @@ the package alone cannot guarantee a given rate.
 | `performance.counter_lock_wait_ms` | 2000 | How long a request waits for a busy device |
 | `performance.advisory_chain_lock` | false | Extra cache lock around issuance (rarely needed) |
 | `queues.high_water_mark` | 5000 | Pending submissions before the API answers `503` |
-| `http.max_rps` | 10 | Requests per second to ZATCA |
+| `http.max_rps` | 0 (off) | Optional ceiling on requests per second to ZATCA, shared by all workers. Off: throughput is set by the number of submission workers; ZATCA's 429 answers open the circuit breaker |
 | `http.max_in_flight_per_device` | 2 | Parallel ZATCA calls per device |
 
 ## Infrastructure checklist
 
 - Database: InnoDB (MySQL/MariaDB); enough connections for web + workers.
 - Queue and cache: Redis. Not the `sync` driver, not the `file` cache with several servers.
-- Artifact disk: shared (S3) when several servers issue invoices.
+- Cache: set `ZATCA_CACHE_STORE` (or the default store) to Redis so the circuit breaker and rate ceiling are shared.
+- Signed XML: stored in the database by default (nothing to share between servers). With
+  `ZATCA_ARTIFACT_DRIVER=filesystem`, use a shared disk (S3) when several servers issue invoices.
 - PHP: OPcache on; Octane or long-running workers benefit from the in-memory key cache.
 - Workers: start with 4 per server; add more if `zatca_outbox` lag grows.

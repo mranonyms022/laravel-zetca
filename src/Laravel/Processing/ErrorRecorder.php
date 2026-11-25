@@ -6,6 +6,7 @@ namespace CodingTriplets\Zatca\Laravel\Processing;
 
 use CodingTriplets\Zatca\Core\Domain\Enums\ErrorCategory;
 use CodingTriplets\Zatca\Core\Domain\Enums\Severity;
+use CodingTriplets\Zatca\Laravel\Database\InsertIgnore;
 use CodingTriplets\Zatca\Laravel\Database\Models\ErrorGroup;
 use CodingTriplets\Zatca\Laravel\Database\Models\Invoice;
 use CodingTriplets\Zatca\Laravel\Database\Models\ZatcaError;
@@ -39,8 +40,8 @@ final class ErrorRecorder
 
         $tenant = (string) ($tenant ?? app(\CodingTriplets\Zatca\Core\Contracts\Tenancy\TenantResolver::class)->current() ?? '');
         $groups = new ErrorGroup();
-        // insertOrIgnore: safe under concurrency and inside PostgreSQL transactions (no aborted transaction).
-        $groups->getConnection()->table($groups->getTable())->insertOrIgnore([
+        // Insert-or-ignore: safe under concurrency and inside PostgreSQL transactions (no aborted transaction).
+        InsertIgnore::row($groups->getConnection(), $groups->getTable(), [
             'tenant_id' => $tenant,
             'fingerprint' => $fingerprint,
             'workflow' => $workflow,
@@ -53,7 +54,7 @@ final class ErrorRecorder
             'last_seen_at' => $now,
             'created_at' => $now,
             'updated_at' => $now,
-        ]);
+        ], ['tenant_id', 'fingerprint']);
         $group = ErrorGroup::query()->withoutGlobalScopes()->where('tenant_id', $tenant)->where('fingerprint', $fingerprint)->firstOrFail();
         ErrorGroup::query()->withoutGlobalScopes()->whereKey($group->id)->update([
             'occurrences' => \Illuminate\Support\Facades\DB::raw('occurrences + 1'),

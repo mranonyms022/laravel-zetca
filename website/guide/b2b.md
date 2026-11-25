@@ -38,21 +38,19 @@ Options and idempotency are the same as for [B2C](./b2c#issue-an-invoice).
 ## Getting the cleared invoice
 
 ```php
-use CodingTriplets\Zatca\Core\Contracts\Storage\ArtifactStore;
-use CodingTriplets\Zatca\Core\Contracts\Storage\StoredArtifact;
 use CodingTriplets\Zatca\Core\Domain\Enums\ArtifactKind;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceArtifact;
+use CodingTriplets\Zatca\Laravel\Storage\InvoiceArtifacts;
 
 $artifact = InvoiceArtifact::where('issuance_id', $invoice->current_issuance_id)
     ->where('kind', ArtifactKind::ClearedXml)->firstOrFail();
 
-$xml = app(ArtifactStore::class)->get(new StoredArtifact(
-    $artifact->disk, $artifact->path, $artifact->sha256, (int) $artifact->bytes, (bool) $artifact->encrypted,
-));
+$xml = app(InvoiceArtifacts::class)->contents($artifact);
 ```
 
-The store checks the SHA-256 of the file on every read; a modified file raises an error instead of being
-returned.
+This works wherever the XML is kept (in the database by default, or on a disk with
+`ZATCA_ARTIFACT_DRIVER=filesystem`). The SHA-256 is checked on every read; modified content raises an error
+instead of being returned.
 
 A convenient place to deliver the invoice is a listener on `InvoiceAccepted`:
 

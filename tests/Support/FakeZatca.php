@@ -52,9 +52,10 @@ final class FakeZatca
     }
 
     /** @param array<string, mixed> $body */
-    public function error(int $status, array $body): self
+    /** @param array<string, string> $headers */
+    public function error(int $status, array $body, array $headers = []): self
     {
-        $this->mock->append(new Response($status, ['Content-Type' => 'application/json'], json_encode($body)));
+        $this->mock->append(new Response($status, ['Content-Type' => 'application/json'] + $headers, json_encode($body)));
 
         return $this;
     }

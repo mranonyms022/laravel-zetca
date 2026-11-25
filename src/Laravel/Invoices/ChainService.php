@@ -6,7 +6,6 @@ namespace CodingTriplets\Zatca\Laravel\Invoices;
 
 use CodingTriplets\Zatca\Core\Contracts\Locks\AdvisoryLock;
 use CodingTriplets\Zatca\Core\Contracts\Persistence\TransactionManager;
-use CodingTriplets\Zatca\Core\Contracts\Storage\ArtifactStore;
 use CodingTriplets\Zatca\Core\Domain\Enums\ArtifactKind;
 use CodingTriplets\Zatca\Core\Domain\Enums\IssuanceReason;
 use CodingTriplets\Zatca\Core\Domain\Enums\IssuanceStatus;
@@ -23,12 +22,12 @@ use CodingTriplets\Zatca\Core\Domain\Enums\ReportingStatus;
 use CodingTriplets\Zatca\Laravel\Database\Models\ZatcaError;
 use CodingTriplets\Zatca\Core\Contracts\Events\EventDispatcher;
 use CodingTriplets\Zatca\Core\Invoice\Shared\Chain\ChainPosition;
+use CodingTriplets\Zatca\Laravel\Database\InsertIgnore;
 use CodingTriplets\Zatca\Laravel\Database\Models\B2bClearanceSubmission;
 use CodingTriplets\Zatca\Laravel\Database\Models\B2cReportingSubmission;
 use CodingTriplets\Zatca\Laravel\Database\Models\ChainEntry;
 use CodingTriplets\Zatca\Laravel\Database\Models\Device;
 use CodingTriplets\Zatca\Laravel\Database\Models\Invoice;
-use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceArtifact;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceCounter;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceIssuance;
 use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceLine;
@@ -37,6 +36,7 @@ use CodingTriplets\Zatca\Laravel\Database\Models\InvoiceVersion;
 use CodingTriplets\Zatca\Laravel\Database\Models\Warning;
 use CodingTriplets\Zatca\Laravel\Processing\Outbox\OutboxRecorder;
 use CodingTriplets\Zatca\Laravel\Processing\ProcessingLogger;
+use CodingTriplets\Zatca\Laravel\Storage\InvoiceArtifacts;
 use Illuminate\Support\Str;
 
 /**
@@ -49,14 +49,15 @@ use Illuminate\Support\Str;
  *     chain forks impossible at the storage level.
  *
  * Everything (artifact row, issuance, ledger entry, counter, invoice pointers, submission row, outbox message) commits
- * together. If anything fails, nothing is committed and the ICV is not consumed. No HTTP call happens here.
+ * together. If anything fails, nothing is committed and the ICV is not consumed. No HTTP call happens here, and with
+ * the default database storage driver no file operation either: the signed XML is a column of the artifact row.
  */
 final class ChainService
 {
     public function __construct(
         private readonly TransactionManager $transactions,
         private readonly AdvisoryLock $locks,
-        private readonly ArtifactStore $artifacts,
+        private readonly InvoiceArtifacts $artifacts,
         private readonly InvoiceGenerators $generators,
         private readonly PayloadPreparer $preparer,
         private readonly SigningCredentialProvider $credentials,
@@ -130,7 +131,8 @@ final class ChainService
         $version = InvoiceVersion::query()->findOrFail($invoice->current_version_id);
         $payload = $this->preparer->prepare((array) $version->payload, $workflow, $device, (string) $invoice->invoice_number);
         $uuid = (string) Str::uuid();
-        $now = new \DateTimeImmutable('now', new \DateTimeZone('Asia/Riyadh'));
+        // Riyadh wall-clock time for the document; Laravel's clock so Carbon::setTestNow / travel applies.
+        $now = \Illuminate\Support\Carbon::now()->setTimezone('Asia/Riyadh')->toDateTimeImmutable();
         if ($previous !== null) {
             $tz = new \DateTimeZone('Asia/Riyadh');
             $rejectedAt = new \DateTimeImmutable(\Illuminate\Support\Carbon::parse($previous->issue_date)->format('Y-m-d') . ' ' . $previous->issue_time, $tz);
@@ -139,11 +141,6 @@ final class ChainService
 
         // Throws InvoiceValidationException / CredentialException → rollback, ICV not consumed.
         $generated = $this->generators->for($workflow)->generate($payload, new ChainPosition($icv, $pih), $uuid, $signing['signing'], $now);
-
-        $stored = $this->artifacts->putImmutable(
-            implode('/', array_filter([(string) $invoice->tenant_id, 'c' . $invoice->company_id, 'd' . $device->id, $now->format('Y/m')])),
-            $generated->xml(),
-        );
 
         $issuance = InvoiceIssuance::query()->create([
             'invoice_id' => $invoice->id,
@@ -159,7 +156,7 @@ final class ChainService
             'issue_time' => $generated->document->issuedAt->format('H:i:s'),
             'certificate_id' => $signing['certificateId'],
             'signature_value' => $generated->signed->signature,
-            'signing_time' => $now,
+            'signing_time' => self::appTime($now),
             'qr_payload' => $generated->qrCode(),
             'reason' => $reason,
             'supersedes_issuance_id' => $reason === IssuanceReason::Initial ? null : $invoice->current_issuance_id,
@@ -168,17 +165,13 @@ final class ChainService
             'issued_at' => now(),
         ]);
 
-        InvoiceArtifact::query()->create([
-            'issuance_id' => $issuance->id,
-            'invoice_id' => $invoice->id,
-            'kind' => ArtifactKind::SignedXml,
-            'disk' => $stored->disk,
-            'path' => $stored->path,
-            'sha256' => $stored->sha256,
-            'bytes' => $stored->bytes,
-            'encrypted' => $stored->encrypted,
-            'mime' => 'application/xml',
-        ]);
+        $this->artifacts->store(
+            (int) $invoice->id,
+            (int) $issuance->id,
+            ArtifactKind::SignedXml,
+            $generated->xml(),
+            implode('/', array_filter([(string) $invoice->tenant_id, 'c' . $invoice->company_id, 'd' . $device->id, $now->format('Y/m')])),
+        );
 
         ChainEntry::query()->create([
             'device_id' => $device->id,
@@ -352,22 +345,31 @@ final class ChainService
 
         return $workflow === Workflow::B2C
             ? B2cReportingSubmission::query()->create($common + [
-                'deadline_at' => \Illuminate\Support\Carbon::instance($now)->addHours((int) config('zatca.b2c.reporting_deadline_hours', 24)),
+                'deadline_at' => self::appTime($now)->addHours((int) config('zatca.b2c.reporting_deadline_hours', 24)),
             ])
             : B2bClearanceSubmission::query()->create($common);
+    }
+
+    /**
+     * The same instant in the application timezone. Laravel writes datetimes as wall-clock text without converting
+     * them, so a Riyadh-time value would otherwise be stored 3 hours off (e.g. a 27 h reporting deadline).
+     */
+    private static function appTime(\DateTimeInterface $at): \Illuminate\Support\Carbon
+    {
+        return \Illuminate\Support\Carbon::instance($at)->setTimezone(date_default_timezone_get());
     }
 
     /** Creates the device counter row once (outside the issuance transaction; race-safe). */
     private function ensureCounter(Device $device): void
     {
         $model = new InvoiceCounter();
-        $model->getConnection()->table($model->getTable())->insertOrIgnore([
+        InsertIgnore::row($model->getConnection(), $model->getTable(), [
             'device_id' => $device->id,
             'environment' => $device->environment->value,
             'last_icv' => 0,
             'lock_version' => 0,
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ], ['device_id', 'environment']);
     }
 }

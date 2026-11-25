@@ -32,6 +32,7 @@ use CodingTriplets\Zatca\Laravel\Processing\Outbox\OutboxRelay;
 use CodingTriplets\Zatca\Core\Fatoora\BasicAuthentication;
 use CodingTriplets\Zatca\Laravel\ZatcaManager;
 use CodingTriplets\Zatca\Core\Contracts\Storage\StoredArtifact;
+use CodingTriplets\Zatca\Laravel\Storage\InvoiceArtifacts;
 use CodingTriplets\Zatca\Tests\Integration\IntegrationTestCase;
 use CodingTriplets\Zatca\Tests\Support\FakeZatca;
 use Illuminate\Support\Facades\Event;
@@ -177,6 +178,7 @@ final class InvoiceProcessingTest extends IntegrationTestCase
 
     public function test_storage_failure_rolls_back_and_does_not_consume_the_counter(): void
     {
+        config(['zatca.storage.driver' => 'filesystem']);
         $real = app(ArtifactStore::class);
         $this->app->instance(ArtifactStore::class, new class implements ArtifactStore {
             public function putImmutable(string $namespace, string $contents, string $extension = 'xml'): StoredArtifact
@@ -292,7 +294,8 @@ final class InvoiceProcessingTest extends IntegrationTestCase
         self::assertSame('1', $request->getHeaderLine('Clearance-Status'));
 
         $cleared = InvoiceArtifact::query()->where('invoice_id', $invoice->id)->where('kind', ArtifactKind::ClearedXml)->sole();
-        self::assertSame('<Invoice>cleared by zatca</Invoice>', app(ArtifactStore::class)->get(new StoredArtifact($cleared->disk, $cleared->path, $cleared->sha256, (int) $cleared->bytes, (bool) $cleared->encrypted)));
+        self::assertSame('<Invoice>cleared by zatca</Invoice>', app(InvoiceArtifacts::class)->contents($cleared));
+        self::assertSame('database', $cleared->disk, 'stored in the database by default');
     }
 
     public function test_http_api_returns_the_queue_contract(): void

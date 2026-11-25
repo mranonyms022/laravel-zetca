@@ -6,8 +6,6 @@ namespace CodingTriplets\Zatca\Laravel\Processing\Submission;
 
 use CodingTriplets\Zatca\Core\Contracts\Events\EventDispatcher;
 use CodingTriplets\Zatca\Core\Contracts\Persistence\TransactionManager;
-use CodingTriplets\Zatca\Core\Contracts\Storage\ArtifactStore;
-use CodingTriplets\Zatca\Core\Contracts\Storage\StoredArtifact;
 use CodingTriplets\Zatca\Core\Domain\Enums\ArtifactKind;
 use CodingTriplets\Zatca\Core\Domain\Enums\AttemptOutcome;
 use CodingTriplets\Zatca\Core\Domain\Enums\ClearanceStatus;
@@ -37,6 +35,7 @@ use CodingTriplets\Zatca\Laravel\Invoices\SigningCredentialProvider;
 use CodingTriplets\Zatca\Laravel\Processing\ErrorRecorder;
 use CodingTriplets\Zatca\Laravel\Processing\Outbox\OutboxRecorder;
 use CodingTriplets\Zatca\Laravel\Processing\ProcessingLogger;
+use CodingTriplets\Zatca\Laravel\Storage\InvoiceArtifacts;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -48,8 +47,10 @@ use Illuminate\Support\Str;
  * - The exact stored bytes are sent (SHA-256 re-checked). Nothing is regenerated; retries resend the same document.
  * - The outcome write is fenced by the claim token: a worker whose lease expired cannot overwrite a newer result.
  * - Acceptance is decided from ZATCA's body (reporting/clearance status), never from the HTTP status alone.
- * - Rejections are never retried automatically (correction needs a human). Transient failures are retried with
- *   backoff through the outbox; 401/403 and malformed requests stop for manual review.
+ * - Rejections are never retried automatically (correction needs a human). ZATCA being unavailable (connection
+ *   failure, timeout, 5xx, 429) opens the circuit breaker and is retried until the retry window closes (B2C: the
+ *   reporting deadline) without an attempt limit; unknown outcomes are retried up to max_attempts. 401/403 and
+ *   malformed requests stop for manual review.
  */
 final class SubmissionRunner
 {
@@ -62,7 +63,7 @@ final class SubmissionRunner
 
     public function __construct(
         private readonly TransactionManager $transactions,
-        private readonly ArtifactStore $artifacts,
+        private readonly InvoiceArtifacts $artifacts,
         private readonly SigningCredentialProvider $credentials,
         private readonly SubmissionGateway $gateway,
         private readonly RetryPolicy $retry,
@@ -96,14 +97,16 @@ final class SubmissionRunner
 
         // Backpressure: open circuit, paused device, rate limit → try later, without using an attempt.
         $wait = $this->circuit->retryAfter("env:{$environment->value}");
+        $reason = 'circuit_open';
         if ($wait === 0 && $device->submissions_paused_until !== null && $device->submissions_paused_until->isFuture()) {
             $wait = (int) max(1, now()->diffInSeconds($device->submissions_paused_until));
+            $reason = 'device_paused';
         }
-        if ($wait === 0 && ! $this->limiter->attempt("zatca:http:{$environment->value}", max(1, (int) config('zatca.http.max_rps', 10)), static fn () => true, 1)) {
-            $wait = 1;
+        if ($wait === 0 && ($wait = $this->rateLimited($environment->value)) > 0) {
+            $reason = 'rate_limited';
         }
         if ($wait > 0) {
-            $this->reschedule($workflow, $submission, $issuance, $invoice, $wait, 'throttled');
+            $this->reschedule($workflow, $submission, $issuance, $invoice, $wait, $reason);
 
             return (string) $submission->status;
         }
@@ -197,8 +200,11 @@ final class SubmissionRunner
             $outcome = AttemptOutcome::ClearanceDeactivated;
         }
         $cleared = $workflow === Workflow::B2B && ! $viaReporting;   // false: the reporting endpoint was used
-        if (in_array($outcome, [AttemptOutcome::Transient, AttemptOutcome::Unknown], true) && $failure instanceof FatooraApiException && $failure->httpStatus === null) {
-            $this->circuit->failure($env);
+        // ZATCA unavailable (connection failure, timeout, 5xx) counts towards opening the circuit; 429 opens it at once.
+        if ($outcome === AttemptOutcome::Transient && $failure instanceof FatooraApiException) {
+            $failure->httpStatus === 429
+                ? $this->circuit->throttled($env, $failure->retryAfter)
+                : $this->circuit->failure($env, $failure->retryAfter);
         } elseif ($result !== null) {
             $this->circuit->success($env);
         }
@@ -314,14 +320,25 @@ final class SubmissionRunner
                 case AttemptOutcome::Transient:
                 case AttemptOutcome::Unknown:
                     $deadline = $submission instanceof B2cReportingSubmission ? $submission->deadline_at : null;
-                    $delay = $this->retry->delay($workflow, (int) $attempt->attempt_number, $deadline);
                     $message = $failure?->getMessage() ?? 'unknown outcome';
+                    if ($outcome === AttemptOutcome::Transient) {
+                        // ZATCA unavailable: no attempt limit, retried until the window (B2C: reporting deadline) closes.
+                        $delay = $this->retry->outageDelay($workflow, (int) $attempt->attempt_number, $deadline, $submission->first_attempt_at);
+                        $gaveUp = 'retry_window_closed';
+                        $gaveUpMessage = "ZATCA stayed unavailable until the retry window closed (after {$attempt->attempt_number} tries): {$message}";
+                    } else {
+                        // Unknown outcome: only these count towards max_attempts.
+                        $counted = SubmissionAttempt::query()->where('workflow', $workflow)->where('submission_id', $submission->id)->where('outcome', AttemptOutcome::Unknown)->count();
+                        $delay = $this->retry->delay($workflow, $counted, $deadline);
+                        $gaveUp = 'attempts_exhausted';
+                        $gaveUpMessage = "Submission failed after {$counted} attempts with an unknown outcome: {$message}";
+                    }
                     if ($delay === null) {
                         $submission->forceFill(['status' => 'failed', 'completed_at' => now(), 'claimed_until' => null])->save();
-                        $this->logger->transition($locked, ['processing_status' => ProcessingStatus::Failed, 'submission_status' => SubmissionStatus::FailedPermanent], 'attempts_exhausted', $message, (int) $issuance->id);
-                        $this->errors->record(ErrorCategory::ApiConnection, Severity::Critical, 'attempts_exhausted', "Submission failed after {$attempt->attempt_number} attempts: {$message}", 'submission', $context);
+                        $this->logger->transition($locked, ['processing_status' => ProcessingStatus::Failed, 'submission_status' => SubmissionStatus::FailedPermanent], $gaveUp, $message, (int) $issuance->id);
+                        $this->errors->record(ErrorCategory::ApiConnection, Severity::Critical, $gaveUp, $gaveUpMessage, 'submission', $context);
                         $locked->next_retry_at = null;
-                        $events[] = new InvoiceSubmissionFailed((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, 'attempts_exhausted', sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id);
+                        $events[] = new InvoiceSubmissionFailed((int) $locked->id, (string) $locked->public_id, (int) $issuance->id, $workflow->value, $gaveUp, sourceType: $locked->source_type, sourceId: $locked->source_id === null ? null : (string) $locked->source_id);
                         break;
                     }
                     $unknown = $outcome === AttemptOutcome::Unknown;
@@ -409,7 +426,7 @@ final class SubmissionRunner
     {
         $artifact = InvoiceArtifact::query()->where('issuance_id', $issuance->id)->where('kind', ArtifactKind::SignedXml)->firstOrFail();
 
-        return $this->artifacts->get(new StoredArtifact((string) $artifact->disk, (string) $artifact->path, (string) $artifact->sha256, (int) $artifact->bytes, (bool) $artifact->encrypted));
+        return $this->artifacts->contents($artifact);
     }
 
     private function storeCleared(Invoice $invoice, InvoiceIssuance $issuance, string $clearedBase64): ?int
@@ -418,19 +435,13 @@ final class SubmissionRunner
         if ($xml === false || $xml === '') {
             return null;
         }
-        $stored = $this->artifacts->putImmutable(implode('/', array_filter([(string) $invoice->tenant_id, 'c' . $invoice->company_id, 'd' . $issuance->device_id, 'cleared', now()->format('Y/m')])), $xml);
-
-        return (int) InvoiceArtifact::query()->create([
-            'issuance_id' => $issuance->id,
-            'invoice_id' => $invoice->id,
-            'kind' => ArtifactKind::ClearedXml,
-            'disk' => $stored->disk,
-            'path' => $stored->path,
-            'sha256' => $stored->sha256,
-            'bytes' => $stored->bytes,
-            'encrypted' => $stored->encrypted,
-            'mime' => 'application/xml',
-        ])->id;
+        return (int) $this->artifacts->store(
+            (int) $invoice->id,
+            (int) $issuance->id,
+            ArtifactKind::ClearedXml,
+            $xml,
+            implode('/', array_filter([(string) $invoice->tenant_id, 'c' . $invoice->company_id, 'd' . $issuance->device_id, 'cleared', now()->format('Y/m')])),
+        )->id;
     }
 
     private function storeWarnings(Invoice $invoice, InvoiceIssuance $issuance, InvoiceSubmissionResult $result): void
@@ -452,9 +463,29 @@ final class SubmissionRunner
         }
     }
 
+    /**
+     * Optional package-side ceiling (`zatca.http.max_rps`, 0 = off) on requests per second per environment. The
+     * counter lives in the shared cache store, so the ceiling is shared by every worker on every server.
+     *
+     * @return int seconds to wait, 0 = go ahead
+     */
+    private function rateLimited(string $environment): int
+    {
+        $max = (int) config('zatca.http.max_rps', 0);
+        if ($max <= 0) {
+            return 0;
+        }
+        $key = "zatca:http:{$environment}";
+
+        return $this->limiter->attempt($key, $max, static fn () => true, 1) ? 0 : max(1, $this->limiter->availableIn($key));
+    }
+
     private function reschedule(Workflow $workflow, B2bClearanceSubmission|B2cReportingSubmission $submission, InvoiceIssuance $issuance, Invoice $invoice, int $seconds, string $reason): void
     {
-        $slot = (int) floor(time() / max(1, $seconds));
-        $this->outbox->record('submission', (int) $submission->id, OutboxRecorder::EVENT_SUBMIT, QueueNames::submission($workflow), "submit:{$issuance->uuid}:{$reason}:{$slot}", ['workflow' => $workflow->value], now()->addSeconds($seconds), (string) $invoice->tenant_id);
+        // Spread the backlog so it does not all come back in the same second. The spread is fixed per document, so
+        // duplicate messages for the same submission collapse onto the same idempotency key.
+        $seconds = max(1, $seconds) + (crc32((string) $issuance->uuid) % (intdiv(max(1, $seconds), 2) + 1));
+        $slot = (int) floor(time() / $seconds);
+        $this->outbox->record('submission', (int) $submission->id, OutboxRecorder::EVENT_SUBMIT, QueueNames::submission($workflow), "submit:{$issuance->uuid}:{$reason}:{$seconds}:{$slot}", ['workflow' => $workflow->value], now()->addSeconds($seconds), (string) $invoice->tenant_id);
     }
 }

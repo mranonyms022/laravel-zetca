@@ -5,6 +5,37 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **SQL Server: every invoice failed** ("This database engine does not support inserting while ignoring errors").
+  The device counter, outbox and error-group inserts now use `INSERT … SELECT … WHERE NOT EXISTS` with
+  `UPDLOCK, HOLDLOCK` on SQL Server; duplicate protection is unchanged on every database.
+- B2C `deadline_at` and issuance `signing_time` were stored as Riyadh wall-clock time in the application timezone
+  (3 hours late with `APP_TIMEZONE=UTC`, so a 27 h reporting window). Both are now stored in the application timezone.
+
+### Changed
+- **Rate limit off by default.** `http.max_rps` defaults to `0` (was 10/s = 600 invoices a minute). When set, the
+  ceiling is shared by all workers on all servers through the new `cache_store` setting.
+- **ZATCA outages no longer use up attempts.** Connection failures, timeouts, 5xx and 429 are retried until the
+  window closes: B2C → the reporting deadline (24 h), B2B → `retry.outage.b2b_window_hours` (24 h) after the first
+  attempt, with gaps capped at `retry.outage.max_delay_seconds` (15 min). `max_attempts` now applies to unknown
+  outcomes only. A submission that gives up records `retry_window_closed` (or `attempts_exhausted`).
+- **Circuit breaker** opens on 5xx (after `http.circuit.failures`) and at once on 429 for at least ZATCA's
+  `Retry-After`; while open nothing is sent and no attempt is used. Real half-open state: exactly one probe request,
+  and the open period doubles on every re-open (`open_seconds` 30 → `max_open_seconds` 600).
+- `b2c.deadline_alert_hours` defaults to `[12, 4, 1]`: `InvoiceReportingDeadlineAtRisk` fires at 12 h left, so a
+  person can be paged half-way through an outage.
+- **Signed / cleared XML is stored in the database** (`storage.driver = database`, the new default): gzip-compressed
+  and base64-encoded in `zatca_invoice_artifacts.content` (about 60–70 % smaller than the raw XML). No file
+  operations while the device counter and invoice rows are locked, nothing to share between servers, no orphan
+  files after a rollback, and the XML is backed up with the database. `ZATCA_ARTIFACT_DRIVER=filesystem` keeps the
+  previous behaviour; existing rows are always read from where they were written.
+  Read XML with `app(InvoiceArtifacts::class)->contents($artifact)` instead of `ArtifactStore::get()`.
+
+### Added
+- Migration `add_zatca_artifact_content`. Run `php artisan migrate`.
+- `cache_store` / `ZATCA_CACHE_STORE`, `storage.driver` / `ZATCA_ARTIFACT_DRIVER`, `retry.outage.*`,
+  `http.circuit.max_open_seconds` / `probe_seconds`.
+
 ## [0.8.0] - 2026-11-03
 
 ### Changed

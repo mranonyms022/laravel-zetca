@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace CodingTriplets\Zatca\Tests\Integration\Invoices;
 
-use CodingTriplets\Zatca\Core\Contracts\Storage\ArtifactStore;
-use CodingTriplets\Zatca\Core\Contracts\Storage\StoredArtifact;
+use CodingTriplets\Zatca\Laravel\Storage\InvoiceArtifacts;
 use CodingTriplets\Zatca\Core\Domain\Enums\ArtifactKind;
 use CodingTriplets\Zatca\Core\Domain\Enums\ClearanceStatus;
 use CodingTriplets\Zatca\Core\Domain\Enums\DocumentType;
@@ -267,11 +266,11 @@ final class InvoiceOperationsTest extends IntegrationTestCase
 
     public function test_manual_retry_resends_the_identical_document(): void
     {
-        config(['zatca.retry.b2c' => ['max_attempts' => 1, 'backoff_seconds' => [30]]]);
         $first = $this->issueB2c('POS-1');
+        $this->travel(25)->hours();          // ZATCA down until after the reporting deadline: the retry window closes
         $this->zatca->error(503, ['message' => 'down']);
         $this->relay();
-        self::assertSame(ProcessingStatus::Failed, $this->invoice($first['invoice_id'])->processing_status, 'attempts exhausted');
+        self::assertSame(ProcessingStatus::Failed, $this->invoice($first['invoice_id'])->processing_status, 'retry window closed');
 
         $this->zatca->reported();
         $status = $this->ops()->retry($first['invoice_id'], 3, now: true);
@@ -283,6 +282,60 @@ final class InvoiceOperationsTest extends IntegrationTestCase
 
         $this->expectException(OperationNotAllowed::class);
         $this->ops()->retry($first['invoice_id']);
+    }
+
+    public function test_zatca_outage_does_not_use_up_attempts_and_reports_once_zatca_is_back(): void
+    {
+        config(['zatca.retry.b2c' => ['max_attempts' => 1, 'backoff_seconds' => [30]], 'zatca.http.circuit.failures' => 100]);
+        $first = $this->issueB2c('POS-1');
+
+        // 6 failures over ~20 hours: far more than max_attempts, still inside the 24 h reporting window.
+        foreach ([503, 500, 502, 504, 503, 500] as $i => $status) {
+            $this->zatca->error($status, ['message' => 'down']);
+            $this->relay();
+            self::assertSame(ProcessingStatus::RetryPending, $this->invoice($first['invoice_id'])->processing_status, "after HTTP {$status}");
+            $this->travel($i === 5 ? 8 : 3)->hours();
+        }
+
+        // Hour ~23: ZATCA is back.
+        $this->zatca->reported();
+        $this->relay();
+        self::assertSame(ProcessingStatus::Reported, $this->invoice($first['invoice_id'])->processing_status);
+        self::assertSame(7, (int) B2cReportingSubmission::query()->sole()->attempts);
+    }
+
+    public function test_429_opens_the_circuit_for_retry_after_and_waiting_uses_no_attempt(): void
+    {
+        $first = $this->issueB2c('POS-1');
+        $this->zatca->error(429, ['message' => 'Too many requests'], ['Retry-After' => '120']);
+        $this->relay();
+        self::assertSame(1, (int) B2cReportingSubmission::query()->sole()->attempts);
+
+        $circuit = app(\CodingTriplets\Zatca\Laravel\Processing\Submission\CircuitBreaker::class);
+        self::assertGreaterThan(100, $circuit->retryAfter('env:' . $this->device->environment->value));
+
+        // A second invoice while the circuit is open: nothing is sent, nothing is counted.
+        $requests = count($this->zatca->history);
+        $second = $this->issueB2c('POS-2');
+        $this->relay();
+        self::assertCount($requests, $this->zatca->history, 'no request while the circuit is open');
+        $submission = B2cReportingSubmission::query()->where('invoice_id', $this->invoice($second['invoice_id'])->id)->sole();
+        self::assertSame(0, (int) $submission->attempts);
+        self::assertSame('pending', $submission->status);
+    }
+
+    public function test_rate_limit_is_off_by_default_and_reschedules_without_an_attempt_when_set(): void
+    {
+        self::assertSame(0, (int) config('zatca.http.max_rps'));
+
+        config(['zatca.http.max_rps' => 1]);
+        $a = $this->issueB2c('POS-1');
+        $b = $this->issueB2c('POS-2');
+        $this->zatca->reported();
+        $this->relay();
+
+        $statuses = B2cReportingSubmission::query()->orderBy('id')->pluck('attempts', 'status')->all();
+        self::assertSame(['reported' => 1, 'pending' => 0], $statuses, 'the second one waits for the next second');
     }
 
     public function test_unexpected_error_during_submission_becomes_an_unknown_outcome_not_a_stuck_claim(): void
@@ -333,7 +386,8 @@ final class InvoiceOperationsTest extends IntegrationTestCase
         $deadline = B2cReportingSubmission::query()->sole()->deadline_at;
         $monitor = app(DeadlineMonitor::class);
 
-        self::assertSame(['at_risk' => 0, 'breached' => 0], $monitor->check($deadline->copy()->subHours(10)));
+        self::assertSame(['at_risk' => 0, 'breached' => 0], $monitor->check($deadline->copy()->subHours(13)));
+        self::assertSame(1, $monitor->check($deadline->copy()->subHours(10))['at_risk'], '12 h threshold (page a person)');
         self::assertSame(1, $monitor->check($deadline->copy()->subHours(3))['at_risk']);
         self::assertSame(0, $monitor->check($deadline->copy()->subHours(2))['at_risk'], 'not repeated');
         self::assertSame(1, $monitor->check($deadline->copy()->subMinutes(30))['at_risk'], '1 h threshold');
@@ -342,7 +396,7 @@ final class InvoiceOperationsTest extends IntegrationTestCase
 
         self::assertTrue((bool) B2cReportingSubmission::query()->sole()->deadline_breached);
         self::assertSame('reporting_deadline_breached', ZatcaError::query()->where('severity', 'CRITICAL')->value('code'));
-        Event::assertDispatchedTimes(InvoiceReportingDeadlineAtRisk::class, 2);
+        Event::assertDispatchedTimes(InvoiceReportingDeadlineAtRisk::class, 3);
         Event::assertDispatched(InvoiceReportingDeadlineBreached::class);
         self::assertSame($first['invoice_id'], $this->invoice($first['invoice_id'])->public_id);
     }
@@ -431,6 +485,6 @@ final class InvoiceOperationsTest extends IntegrationTestCase
     {
         $a = InvoiceArtifact::query()->where('issuance_id', $issuanceId)->where('kind', ArtifactKind::SignedXml)->sole();
 
-        return app(ArtifactStore::class)->get(new StoredArtifact($a->disk, $a->path, $a->sha256, (int) $a->bytes, (bool) $a->encrypted));
+        return app(InvoiceArtifacts::class)->contents($a);
     }
 }

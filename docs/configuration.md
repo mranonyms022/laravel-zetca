@@ -77,25 +77,28 @@ The provider and model are used to build the EGS serial number `1-<provider>|2-<
 
 | Key | Env | Default | Notes |
 |---|---|---|---|
-| `storage.disk` | `ZATCA_ARTIFACT_DISK` | `local` | Must be **private**. Use a shared disk on multi-server setups |
+| `storage.driver` | `ZATCA_ARTIFACT_DRIVER` | `database` | `database`: XML in the artifact row, gzip + base64 (no file I/O in the issuance transaction, works on any number of servers, backed up with the database). `filesystem`: XML on `storage.disk`. Existing rows are always read from where they were written |
+| `storage.disk` | `ZATCA_ARTIFACT_DISK` | `local` | Filesystem driver only. Must be **private**. Use a shared disk on multi-server setups |
 | `storage.root` | – | `zatca` | Folder inside the disk |
-| `storage.encrypt_local` | `ZATCA_ENCRYPT_ARTIFACTS` | `false` | App-level encryption for local disks (S3: use SSE-KMS) |
+| `storage.encrypt_local` | `ZATCA_ENCRYPT_ARTIFACTS` | `false` | App-level encryption of stored XML, both drivers (S3: SSE-KMS also works) |
+| `cache_store` | `ZATCA_CACHE_STORE` | default store | Shared state: circuit breaker, rate ceiling, advisory lock. Must be shared (Redis, …) with several servers |
 
 ## HTTP, queues and retries
 
 | Key | Default | Notes |
 |---|---|---|
 | `http.timeout` / `connect_timeout` | 30 / 10 s | |
-| `http.max_rps` | 10 | Global outbound rate (ZATCA does not publish limits) |
+| `http.max_rps` | 0 (off) | Optional ceiling on requests per second per environment, shared by all workers through `cache_store`. Off by default: ZATCA does not publish limits, and its 429 answers open the circuit breaker |
 | `http.max_in_flight_per_device` | 2 | |
 | `queues.connection` | default | |
 | `queues.names.*` | `zatca-b2b-generation`, `zatca-b2b-clearance`, `zatca-b2b-retry`, `zatca-b2c-generation`, `zatca-b2c-reporting`, `zatca-b2c-retry`, `zatca-device-onboarding`, `zatca-device-renewal`, `zatca-outbox`, `zatca-maintenance` | |
 | `queues.high_water_mark` | 5000 | Outbox stops feeding a queue above this backlog |
-| `retry.b2b` / `retry.b2c` | 10 attempts, exponential | |
-| `retry.b2c_deadline_margin_hours` | 4 | Last automatic B2C attempt this long before the deadline |
+| `retry.b2b` / `retry.b2c` | 10 attempts, exponential | `max_attempts` applies to unknown outcomes only (see `retry.outage`) |
+| `retry.outage.b2b_window_hours` / `max_delay_seconds` | 24 / 900 | ZATCA unavailable (connection failure, timeout, 5xx, 429): retried without an attempt limit until the window closes. B2C: the reporting deadline; B2B: this many hours after the first attempt. Gaps capped at `max_delay_seconds` |
+| `retry.b2c_deadline_margin_hours` | 4 | Unknown outcomes: last automatic B2C attempt this long before the deadline |
 | `b2c.reporting_deadline_hours` | 24 | |
 | `b2c.reporting_mode` | `queue` | `queue`: `issue()` answers in milliseconds and reporting runs on the queue. `sync`: reporting happens inside the request, which adds ZATCA's response time |
-| `http.circuit.failures` / `open_seconds` | 5 / 60 | Per-environment circuit breaker on transport failures |
+| `http.circuit.failures` / `open_seconds` / `max_open_seconds` / `probe_seconds` | 5 / 30 / 600 / 120 | Per-environment circuit breaker: opens after `failures` consecutive connection failures / timeouts / 5xx, or at once on 429 (for at least Retry-After). Nothing is sent and no attempts are used while open. The open period doubles on each re-open up to `max_open_seconds`; then a single probe request decides |
 | `outbox.schedule` | `true` | Schedules `zatca:outbox:relay` (every minute), plus `zatca:outbox:prune` and `zatca:chain:verify` (daily) |
 | `outbox.max_attempts` | 10 | Handler failures allowed before a message is dead-lettered (CRITICAL `queue` error) |
 | `outbox.lease_seconds` | 600 | A dispatched message whose job has not finished within this time is dispatched again |

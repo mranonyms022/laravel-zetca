@@ -15,6 +15,9 @@ final class FatooraApiException extends ZatcaException
 
     public bool $retryable = false;
 
+    /** Seconds from ZATCA's Retry-After header (429 / 503), when it sent one. */
+    public ?int $retryAfter = null;
+
     /** @var list<array{code: string, message: string}> */
     public array $errors = [];
 

@@ -54,7 +54,8 @@ explicitly; confirm them with ZATCA or your tax advisor.
 
 | Key | Env | Default | Description |
 |---|---|---|---|
-| `storage.disk` | `ZATCA_ARTIFACT_DISK` | `local` | **Private** disk for signed/cleared XML |
+| `storage.driver` | `ZATCA_ARTIFACT_DRIVER` | `database` | `database`: signed/cleared XML in the artifact row (gzip + base64). `filesystem`: on `storage.disk` |
+| `storage.disk` | `ZATCA_ARTIFACT_DISK` | `local` | Filesystem driver: **private** disk for signed/cleared XML |
 | `storage.root` | | `zatca` | Folder on the disk |
 | `storage.encrypt_local` | `ZATCA_ENCRYPT_ARTIFACTS` | `false` | Encrypt stored XML |
 
@@ -64,10 +65,13 @@ explicitly; confirm them with ZATCA or your tax advisor.
 |---|---|---|---|
 | `http.timeout` | | 30 | Seconds |
 | `http.connect_timeout` | | 10 | Seconds |
-| `http.max_rps` | `ZATCA_MAX_RPS` | 10 | Requests per second to ZATCA |
+| `http.max_rps` | `ZATCA_MAX_RPS` | 0 | Optional ceiling on requests per second to ZATCA, shared by all workers. 0 = off |
 | `http.max_in_flight_per_device` | `ZATCA_MAX_IN_FLIGHT_PER_DEVICE` | 2 | Parallel calls per device |
-| `http.circuit.failures` | | 5 | Consecutive transport failures before the circuit opens |
-| `http.circuit.open_seconds` | | 60 | How long submissions pause |
+| `http.circuit.failures` | | 5 | Consecutive connection failures / timeouts / 5xx before the circuit opens (429 opens it at once) |
+| `http.circuit.open_seconds` | | 30 | First open period; doubles on every re-open |
+| `http.circuit.max_open_seconds` | | 600 | Longest open period |
+| `http.circuit.probe_seconds` | | 120 | A half-open probe that never reports back is replaced after this |
+| `cache_store` | `ZATCA_CACHE_STORE` | default | Cache store shared by all workers (circuit breaker, rate ceiling) |
 
 ## Outbox
 
@@ -103,14 +107,16 @@ explicitly; confirm them with ZATCA or your tax advisor.
 | `retry.b2b.backoff_seconds` | 60 … 43200 | Delay before each retry (randomised 50–100 %) |
 | `retry.b2c.max_attempts` | 10 | |
 | `retry.b2c.backoff_seconds` | 30 … 10800 | |
-| `retry.b2c_deadline_margin_hours` | 4 | Last automatic B2C attempt at least this long before the deadline |
+| `retry.b2c_deadline_margin_hours` | 4 | Unknown outcomes: last automatic B2C attempt at least this long before the deadline |
+| `retry.outage.b2b_window_hours` | 24 | ZATCA unavailable: B2B retried this long after the first attempt (B2C: until the reporting deadline). These retries do not count towards `max_attempts` |
+| `retry.outage.max_delay_seconds` | 900 | Longest gap between outage retries |
 
 ## B2C
 
 | Key | Env | Default | Description |
 |---|---|---|---|
 | `b2c.reporting_deadline_hours` | | 24 | Reporting window after issuance |
-| `b2c.deadline_alert_hours` | | `[4, 1]` | Hours before the deadline at which `InvoiceReportingDeadlineAtRisk` fires |
+| `b2c.deadline_alert_hours` | | `[12, 4, 1]` | Hours before the deadline at which `InvoiceReportingDeadlineAtRisk` fires (12 h: page someone during a ZATCA outage) |
 | `b2c.reporting_mode` | `ZATCA_B2C_REPORTING_MODE` | `queue` | `queue` or `sync` |
 | `b2c.infer_standard_vat_category` | | `true` | Missing category + 15 % → `S` with a warning |
 

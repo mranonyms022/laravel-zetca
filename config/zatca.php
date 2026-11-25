@@ -63,19 +63,42 @@ return [
     ],
 
     'storage' => [
-        // Must be a PRIVATE disk. Use a shared disk (e.g. s3) when running several app servers.
+        // Where signed / cleared XML is kept:
+        //  database   (default) in the artifact row, gzip-compressed and base64-encoded (about 60-70% smaller than the
+        //             raw XML for typical invoices). No file
+        //             operations inside the issuance transaction, works on any number of servers, rolled back with
+        //             the transaction and backed up with the database.
+        //  filesystem on `disk` below (content-addressed files). Must be a PRIVATE disk, shared (e.g. s3) when
+        //             running several app servers.
+        // Existing rows are always read from where they were written, so switching is safe.
+        'driver' => env('ZATCA_ARTIFACT_DRIVER', 'database'),
         'disk' => env('ZATCA_ARTIFACT_DISK', 'local'),
         'root' => 'zatca',
+        // Encrypt stored XML with the credential vault (both drivers).
         'encrypt_local' => env('ZATCA_ENCRYPT_ARTIFACTS', false),
     ],
+
+    /*
+    | Cache store for state every worker must share: the ZATCA circuit breaker, the optional request-rate ceiling and
+    | the optional advisory chain lock. null = the default store. With several servers it MUST be a shared store
+    | (redis, memcached, database), never "file" or "array".
+    */
+    'cache_store' => env('ZATCA_CACHE_STORE'),
 
     'http' => [
         'timeout' => 30,
         'connect_timeout' => 10,
-        'max_rps' => env('ZATCA_MAX_RPS', 10),
+        // Optional ceiling on ZATCA submissions per second, per environment, shared by all workers on all servers
+        // (through zatca.cache_store). 0 = no package ceiling: throughput is set by the number of submission
+        // workers, and ZATCA's own 429 answers open the circuit breaker below.
+        'max_rps' => env('ZATCA_MAX_RPS', 0),
         'max_in_flight_per_device' => env('ZATCA_MAX_IN_FLIGHT_PER_DEVICE', 2),
-        // Per-environment circuit breaker: open after N consecutive transport failures, for open_seconds.
-        'circuit' => ['failures' => 5, 'open_seconds' => 60],
+        // Per-environment circuit breaker. Opens after `failures` consecutive failures where ZATCA is unavailable
+        // (connection failure, timeout, 5xx), or at once on 429 (for at least ZATCA's Retry-After). While open,
+        // nothing is sent and no attempts are used. The open period doubles on every re-open, from open_seconds up to
+        // max_open_seconds; then one probe request decides (a probe that never reports back is replaced after
+        // probe_seconds).
+        'circuit' => ['failures' => 5, 'open_seconds' => 30, 'max_open_seconds' => 600, 'probe_seconds' => 120],
     ],
 
     'outbox' => [
@@ -109,15 +132,22 @@ return [
     'retry' => [
         'b2b' => ['max_attempts' => 10, 'backoff_seconds' => [60, 120, 300, 900, 1800, 3600, 7200, 14400, 28800, 43200]],
         'b2c' => ['max_attempts' => 10, 'backoff_seconds' => [30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 10800]],
-        // B2C: last automatic attempt must happen at least this many hours before the reporting deadline.
+        // max_attempts / b2c_deadline_margin_hours apply to unknown outcomes (e.g. 200 without a readable body).
+        // B2C: last such attempt must happen at least this many hours before the reporting deadline.
         'b2c_deadline_margin_hours' => 4,
+        // ZATCA unavailable (connection failure, timeout, 5xx, 429): these tries do NOT use up max_attempts. They go
+        // on until the window closes: B2C → the reporting deadline (zatca.b2c.reporting_deadline_hours after
+        // issuance); B2B → b2b_window_hours after the first attempt. Gaps follow backoff_seconds, capped at
+        // max_delay_seconds so the backlog is sent soon after ZATCA is back.
+        'outage' => ['b2b_window_hours' => 24, 'max_delay_seconds' => 900],
     ],
 
     'b2c' => [
         // Reporting window after issuance (hours): "within 24 hours" (Detailed Guidelines v1.0 6.5).
         'reporting_deadline_hours' => 24,
         // InvoiceReportingDeadlineAtRisk fires once per threshold (hours left) for documents not yet reported.
-        'deadline_alert_hours' => [4, 1],
+        // 12 = half-way through the 24 h window: listen to this event to page a person during a ZATCA outage.
+        'deadline_alert_hours' => [12, 4, 1],
         // queue: issue + return QR/counter immediately, report on the zatca-b2c-reporting queue.
         // sync:  also report to ZATCA inside the request (slower; low volume only).
         'reporting_mode' => env('ZATCA_B2C_REPORTING_MODE', 'queue'),
