@@ -5,6 +5,21 @@ and the project uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-25
+
+### Upgrading
+- Run `php artisan migrate` (adds `content` / `encoding` to `zatca_invoice_artifacts`).
+- New signed / cleared XML is stored in the database. To keep files on a disk, set `ZATCA_ARTIFACT_DRIVER=filesystem`.
+- Code that read XML with `ArtifactStore::get()` must use `app(InvoiceArtifacts::class)->contents($artifact)`.
+- With several servers, point `ZATCA_CACHE_STORE` (or the default cache) at a shared store such as Redis.
+- `http.max_rps` is now `0` (off). Set `ZATCA_MAX_RPS` only if you want a ceiling.
+
+### Verified
+- Full test suite (209 tests) on SQLite and on SQL Server 2019 (ODBC Driver 17, Microsoft Drivers for PHP 5.13.3),
+  including parallel issuance on one device from several processes.
+- Not yet verified: a real host application against the ZATCA sandbox, and sustained load at 30–50k invoices a
+  minute. Planned before 1.0.0.
+
 ### Fixed
 - **SQL Server: every invoice failed** ("This database engine does not support inserting while ignoring errors").
   The device counter, outbox and error-group inserts now use `INSERT … SELECT … WHERE NOT EXISTS` with
